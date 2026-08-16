@@ -4,7 +4,7 @@ const cors = require("cors");
 const bcrypt = require("bcryptjs");
 const Student = require("./models/Student");
 const Teacher = require("./models/Teacher");
-
+const Payment = require("./models/Payment");
 const Attendance = require("./models/Attendance");
 
 const app = express();
@@ -547,6 +547,177 @@ app.get("/api/teachers/:id", async (req, res) => {
 
             message: "Unable to fetch teacher."
 
+        });
+
+    }
+
+});
+
+app.post("/api/payments", async (req, res) => {
+
+    try {
+
+        const {
+            studentMongoId,
+            monthlyFee,
+            amount,
+            month,
+            paymentDate,
+            paymentMode,
+            transactionId
+        } = req.body;
+
+
+        // ==========================================
+        // FIND STUDENT
+        // ==========================================
+
+        const student =
+            await Student.findById(studentMongoId);
+
+        if (!student) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Student not found."
+            });
+
+        }
+
+
+        // ==========================================
+        // CALCULATE FEE AND DUE
+        // ==========================================
+
+        const monthlyFeeNumber =
+            Number(monthlyFee) || 0;
+
+        const paidNumber =
+            Number(amount) || 0;
+
+        const dueAmount =
+            Math.max(
+                monthlyFeeNumber - paidNumber,
+                0
+            );
+
+
+        // ==========================================
+        // CREATE PAYMENT
+        // ==========================================
+
+        const payment =
+            await Payment.create({
+
+                studentId:
+                    student.studentId,
+
+                studentName:
+                    student.studentName,
+
+                fatherName:
+                    student.fatherName || "",
+
+                rollNumber:
+                    student.rollNumber || "",
+
+                className:
+                    student.academic?.class || "",
+
+                admissionNumber:
+                    student.admissionNumber || "",
+
+                monthlyFee:
+                    monthlyFeeNumber,
+
+                amount:
+                    paidNumber,
+
+                dueAmount:
+                    dueAmount,
+
+                month:
+                    month,
+
+                paymentDate:
+                    paymentDate
+                        ? new Date(paymentDate)
+                        : new Date(),
+
+                paymentMode:
+                    paymentMode || "Cash",
+
+                transactionId:
+                    transactionId || ""
+
+            });
+
+
+        // ==========================================
+        // RESPONSE
+        // ==========================================
+
+        res.status(201).json({
+
+            success: true,
+
+            message:
+                "Fee payment submitted successfully.",
+
+            payment
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Payment submit error:",
+            error
+        );
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to submit payment."
+
+        });
+
+    }
+
+});
+
+
+app.get("/api/payments/student/:studentId", async (req, res) => {
+
+    try {
+
+        const payments = await Payment
+            .find({
+                studentId: req.params.studentId
+            })
+            .sort({
+                paymentDate: 1,
+                createdAt: 1
+            });
+
+        res.json({
+            success: true,
+            payments
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Fetch payments error:",
+            error
+        );
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch payments."
         });
 
     }
