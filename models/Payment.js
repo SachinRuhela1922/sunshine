@@ -41,10 +41,12 @@ const paymentSchema = new mongoose.Schema(
             type: String,
             required: true
         },
+
         monthlyFee: {
-    type: Number,
-    required: true
-},
+            type: Number,
+            required: true
+        },
+
         paymentDate: {
             type: Date,
             required: true

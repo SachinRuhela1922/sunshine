@@ -554,9 +554,7 @@ app.get("/api/teachers/:id", async (req, res) => {
 });
 
 app.post("/api/payments", async (req, res) => {
-
     try {
-
         const {
             studentMongoId,
             monthlyFee,
@@ -567,107 +565,164 @@ app.post("/api/payments", async (req, res) => {
             transactionId
         } = req.body;
 
-
         // ==========================================
         // FIND STUDENT
         // ==========================================
 
-        const student =
-            await Student.findById(studentMongoId);
+        const student = await Student.findById(studentMongoId);
 
         if (!student) {
-
             return res.status(404).json({
                 success: false,
                 message: "Student not found."
             });
-
         }
 
+        // ==========================================
+        // VALIDATE AMOUNTS
+        // ==========================================
+
+        const monthlyFeeNumber = Number(monthlyFee) || 0;
+        const paidNumber = Number(amount) || 0;
+
+        if (monthlyFeeNumber < 0 || paidNumber < 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Fee and payment cannot be negative."
+            });
+        }
 
         // ==========================================
-        // CALCULATE FEE AND DUE
+        // GET ALL PREVIOUS PAYMENTS
         // ==========================================
 
-        const monthlyFeeNumber =
-            Number(monthlyFee) || 0;
+        const previousPayments = await Payment.find({
+            studentId: student.studentId
+        }).sort({
+            paymentDate: 1,
+            createdAt: 1
+        });
 
-        const paidNumber =
-            Number(amount) || 0;
+        // ==========================================
+        // CALCULATE PREVIOUS OUTSTANDING DUE
+        // ==========================================
 
-        const dueAmount =
+        let previousDue = 0;
+
+        previousPayments.forEach(payment => {
+            const fee = Number(payment.monthlyFee) || 0;
+            const paid = Number(payment.amount) || 0;
+
+            previousDue += fee - paid;
+
+            // Never allow negative due
+            if (previousDue < 0) {
+                previousDue = 0;
+            }
+        });
+
+        // ==========================================
+        // CURRENT MONTH PAYMENT
+        // ==========================================
+
+        // Current month's fee first covers previous due.
+        const amountUsedForPreviousDue =
+            Math.min(paidNumber, previousDue);
+
+        const remainingPayment =
+            paidNumber - amountUsedForPreviousDue;
+
+        // Current month's own fee after adjusting
+        // previous outstanding amount.
+        const currentMonthDue =
             Math.max(
-                monthlyFeeNumber - paidNumber,
+                monthlyFeeNumber - remainingPayment,
                 0
             );
 
+        // ==========================================
+        // TOTAL OUTSTANDING AFTER THIS PAYMENT
+        // ==========================================
+
+        const totalDueAfterPayment =
+            Math.max(
+                previousDue + monthlyFeeNumber - paidNumber,
+                0
+            );
 
         // ==========================================
         // CREATE PAYMENT
         // ==========================================
 
-        const payment =
-            await Payment.create({
+        const payment = await Payment.create({
 
-                studentId:
-                    student.studentId,
+            studentId:
+                student.studentId,
 
-                studentName:
-                    student.studentName,
+            studentName:
+                student.studentName,
 
-                fatherName:
-                    student.fatherName || "",
+            fatherName:
+                student.fatherName ||
+                student.father?.name ||
+                "",
 
-                rollNumber:
-                    student.rollNumber || "",
+            rollNumber:
+                student.rollNumber || "",
 
-                className:
-                    student.academic?.class || "",
+            className:
+                student.academic?.class || "",
 
-                admissionNumber:
-                    student.admissionNumber || "",
+            admissionNumber:
+                student.admissionNumber || "",
 
-                monthlyFee:
-                    monthlyFeeNumber,
+            monthlyFee:
+                monthlyFeeNumber,
 
-                amount:
-                    paidNumber,
+            amount:
+                paidNumber,
 
-                dueAmount:
-                    dueAmount,
+            // This is the outstanding due after
+            // considering previous carry-forward.
+            dueAmount:
+                totalDueAfterPayment,
 
-                month:
-                    month,
+            month:
+                month,
 
-                paymentDate:
-                    paymentDate
-                        ? new Date(paymentDate)
-                        : new Date(),
+            paymentDate:
+                paymentDate
+                    ? new Date(paymentDate)
+                    : new Date(),
 
-                paymentMode:
-                    paymentMode || "Cash",
+            paymentMode:
+                paymentMode || "Cash",
 
-                transactionId:
-                    transactionId || ""
-
-            });
-
+            transactionId:
+                transactionId || ""
+        });
 
         // ==========================================
         // RESPONSE
         // ==========================================
 
         res.status(201).json({
-
             success: true,
 
             message:
                 "Fee payment submitted successfully.",
 
-            payment
+            payment,
 
+            previousDue,
+
+            amountUsedForPreviousDue,
+
+            currentMonthDue,
+
+            totalDue:
+                totalDueAfterPayment
         });
-
 
     } catch (error) {
 
@@ -677,16 +732,11 @@ app.post("/api/payments", async (req, res) => {
         );
 
         res.status(500).json({
-
             success: false,
-
             message:
                 "Unable to submit payment."
-
         });
-
     }
-
 });
 
 
