@@ -6,6 +6,7 @@ const Student = require("./models/Student");
 const Teacher = require("./models/Teacher");
 const Payment = require("./models/Payment");
 const Attendance = require("./models/Attendance");
+const ExtraClass = require("./models/ExtraClass");
 
 const app = express();
 
@@ -553,8 +554,10 @@ app.get("/api/teachers/:id", async (req, res) => {
 
 });
 
+
 app.post("/api/payments", async (req, res) => {
     try {
+
         const {
             studentMongoId,
             monthlyFee,
@@ -562,8 +565,22 @@ app.post("/api/payments", async (req, res) => {
             month,
             paymentDate,
             paymentMode,
-            transactionId
+            transactionId,
+
+            // Extra Fees
+            registrationFee,
+            conveyanceFee,
+            bookFee,
+            stationaryFee,
+            examFee,
+            redCrossFee,
+            scoutFee,
+            tieBalance,
+            beltBalance,
+            shirtPantBalance
+
         } = req.body;
+
 
         // ==========================================
         // FIND STUDENT
@@ -578,8 +595,9 @@ app.post("/api/payments", async (req, res) => {
             });
         }
 
+
         // ==========================================
-        // VALIDATE AMOUNTS
+        // VALIDATE MONTHLY FEE & PAYMENT
         // ==========================================
 
         const monthlyFeeNumber = Number(monthlyFee) || 0;
@@ -592,8 +610,44 @@ app.post("/api/payments", async (req, res) => {
             });
         }
 
+
         // ==========================================
-        // GET ALL PREVIOUS PAYMENTS
+        // EXTRA FEES
+        // ==========================================
+
+        const registrationFeeNumber =
+            Math.max(Number(registrationFee) || 0, 0);
+
+        const conveyanceFeeNumber =
+            Math.max(Number(conveyanceFee) || 0, 0);
+
+        const bookFeeNumber =
+            Math.max(Number(bookFee) || 0, 0);
+
+        const stationaryFeeNumber =
+            Math.max(Number(stationaryFee) || 0, 0);
+
+        const examFeeNumber =
+            Math.max(Number(examFee) || 0, 0);
+
+        const redCrossFeeNumber =
+            Math.max(Number(redCrossFee) || 0, 0);
+
+        const scoutFeeNumber =
+            Math.max(Number(scoutFee) || 0, 0);
+
+        const tieBalanceNumber =
+            Math.max(Number(tieBalance) || 0, 0);
+
+        const beltBalanceNumber =
+            Math.max(Number(beltBalance) || 0, 0);
+
+        const shirtPantBalanceNumber =
+            Math.max(Number(shirtPantBalance) || 0, 0);
+
+
+        // ==========================================
+        // FIND PREVIOUS PAYMENTS
         // ==========================================
 
         const previousPayments = await Payment.find({
@@ -603,6 +657,7 @@ app.post("/api/payments", async (req, res) => {
             createdAt: 1
         });
 
+
         // ==========================================
         // CALCULATE PREVIOUS OUTSTANDING DUE
         // ==========================================
@@ -610,8 +665,12 @@ app.post("/api/payments", async (req, res) => {
         let previousDue = 0;
 
         previousPayments.forEach(payment => {
-            const fee = Number(payment.monthlyFee) || 0;
-            const paid = Number(payment.amount) || 0;
+
+            const fee =
+                Number(payment.monthlyFee) || 0;
+
+            const paid =
+                Number(payment.amount) || 0;
 
             previousDue += fee - paid;
 
@@ -621,40 +680,58 @@ app.post("/api/payments", async (req, res) => {
             }
         });
 
+
         // ==========================================
-        // CURRENT MONTH PAYMENT
+        // CURRENT PAYMENT
         // ==========================================
 
-        // Current month's fee first covers previous due.
+        // Current payment first clears previous due.
+
         const amountUsedForPreviousDue =
-            Math.min(paidNumber, previousDue);
+            Math.min(
+                paidNumber,
+                previousDue
+            );
 
         const remainingPayment =
-            paidNumber - amountUsedForPreviousDue;
+            paidNumber -
+            amountUsedForPreviousDue;
 
-        // Current month's own fee after adjusting
-        // previous outstanding amount.
+
+        // ==========================================
+        // CURRENT MONTH DUE
+        // ==========================================
+
         const currentMonthDue =
             Math.max(
-                monthlyFeeNumber - remainingPayment,
+                monthlyFeeNumber -
+                remainingPayment,
                 0
             );
 
+
         // ==========================================
-        // TOTAL OUTSTANDING AFTER THIS PAYMENT
+        // TOTAL OUTSTANDING DUE
         // ==========================================
 
         const totalDueAfterPayment =
             Math.max(
-                previousDue + monthlyFeeNumber - paidNumber,
+                previousDue +
+                monthlyFeeNumber -
+                paidNumber,
                 0
             );
+
 
         // ==========================================
         // CREATE PAYMENT
         // ==========================================
 
         const payment = await Payment.create({
+
+            // --------------------------------------
+            // STUDENT DETAILS
+            // --------------------------------------
 
             studentId:
                 student.studentId,
@@ -668,13 +745,21 @@ app.post("/api/payments", async (req, res) => {
                 "",
 
             rollNumber:
-                student.rollNumber || "",
+                student.rollNumber ||
+                "",
 
             className:
-                student.academic?.class || "",
+                student.academic?.class ||
+                "",
 
             admissionNumber:
-                student.admissionNumber || "",
+                student.admissionNumber ||
+                "",
+
+
+            // --------------------------------------
+            // MONTHLY FEE
+            // --------------------------------------
 
             monthlyFee:
                 monthlyFeeNumber,
@@ -682,8 +767,6 @@ app.post("/api/payments", async (req, res) => {
             amount:
                 paidNumber,
 
-            // This is the outstanding due after
-            // considering previous carry-forward.
             dueAmount:
                 totalDueAfterPayment,
 
@@ -699,14 +782,54 @@ app.post("/api/payments", async (req, res) => {
                 paymentMode || "Cash",
 
             transactionId:
-                transactionId || ""
+                transactionId || "",
+
+
+            // --------------------------------------
+            // ADDITIONAL FEES
+            // --------------------------------------
+
+            additionalFees: {
+
+                registrationFee:
+                    registrationFeeNumber,
+
+                conveyanceFee:
+                    conveyanceFeeNumber,
+
+                bookFee:
+                    bookFeeNumber,
+
+                stationaryFee:
+                    stationaryFeeNumber,
+
+                examFee:
+                    examFeeNumber,
+
+                redCrossFee:
+                    redCrossFeeNumber,
+
+                scoutFee:
+                    scoutFeeNumber,
+
+                tieBalance:
+                    tieBalanceNumber,
+
+                beltBalance:
+                    beltBalanceNumber,
+
+                shirtPantBalance:
+                    shirtPantBalanceNumber
+            }
         });
+
 
         // ==========================================
         // RESPONSE
         // ==========================================
 
         res.status(201).json({
+
             success: true,
 
             message:
@@ -718,11 +841,14 @@ app.post("/api/payments", async (req, res) => {
 
             amountUsedForPreviousDue,
 
+            remainingPayment,
+
             currentMonthDue,
 
             totalDue:
                 totalDueAfterPayment
         });
+
 
     } catch (error) {
 
@@ -732,9 +858,405 @@ app.post("/api/payments", async (req, res) => {
         );
 
         res.status(500).json({
+
             success: false,
+
             message:
-                "Unable to submit payment."
+                "Unable to submit payment.",
+            
+            error:
+                error.message
+        });
+    }
+});
+
+app.get("/api/extra-classes", async (req, res) => {
+    try {
+        const classes = await ExtraClass.find()
+            .sort({ className: 1 });
+ 
+        res.json({
+            success: true,
+            classes
+        });
+ 
+    } catch (error) {
+        console.error("Fetch extra classes error:", error);
+ 
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch classes."
+        });
+    }
+});
+ 
+ 
+// ==========================================
+// CREATE EXTRA CLASS
+// ==========================================
+ 
+app.post("/api/extra-classes", async (req, res) => {
+    try {
+        const { className, academicYear, description } = req.body;
+ 
+        if (!className || !className.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Class name is required."
+            });
+        }
+ 
+        const existingClass = await ExtraClass.findOne({
+            className: className.trim()
+        });
+ 
+        if (existingClass) {
+            return res.status(400).json({
+                success: false,
+                message: "This class already exists."
+            });
+        }
+ 
+        const newClass = await ExtraClass.create({
+            className: className.trim(),
+            academicYear: (academicYear || "").trim(),
+            description: (description || "").trim(),
+            students: []
+        });
+ 
+        res.status(201).json({
+            success: true,
+            message: "Class created successfully.",
+            class: newClass
+        });
+ 
+    } catch (error) {
+        console.error("Create extra class error:", error);
+ 
+        res.status(500).json({
+            success: false,
+            message: "Unable to create class."
+        });
+    }
+});
+ 
+ 
+// ==========================================
+// GET SINGLE CLASS (with its students)
+// ==========================================
+ 
+app.get("/api/extra-classes/:id", async (req, res) => {
+    try {
+        const extraClass = await ExtraClass.findById(req.params.id);
+ 
+        if (!extraClass) {
+            return res.status(404).json({
+                success: false,
+                message: "Class not found."
+            });
+        }
+ 
+        res.json({
+            success: true,
+            class: extraClass
+        });
+ 
+    } catch (error) {
+        console.error("Get extra class error:", error);
+ 
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch class."
+        });
+    }
+});
+ 
+ 
+// ==========================================
+// UPDATE CLASS
+// ==========================================
+ 
+app.put("/api/extra-classes/:id", async (req, res) => {
+    try {
+        const { className, academicYear, description } = req.body;
+ 
+        const extraClass = await ExtraClass.findById(req.params.id);
+ 
+        if (!extraClass) {
+            return res.status(404).json({
+                success: false,
+                message: "Class not found."
+            });
+        }
+ 
+        if (className && className.trim()) {
+            extraClass.className = className.trim();
+        }
+ 
+        if (academicYear !== undefined) {
+            extraClass.academicYear = academicYear;
+        }
+ 
+        if (description !== undefined) {
+            extraClass.description = description;
+        }
+ 
+        await extraClass.save();
+ 
+        res.json({
+            success: true,
+            message: "Class updated successfully.",
+            class: extraClass
+        });
+ 
+    } catch (error) {
+        console.error("Update extra class error:", error);
+ 
+        res.status(500).json({
+            success: false,
+            message: "Unable to update class."
+        });
+    }
+});
+ 
+ 
+// ==========================================
+// DELETE CLASS
+// ==========================================
+ 
+app.delete("/api/extra-classes/:id", async (req, res) => {
+    try {
+        const extraClass = await ExtraClass.findByIdAndDelete(req.params.id);
+ 
+        if (!extraClass) {
+            return res.status(404).json({
+                success: false,
+                message: "Class not found."
+            });
+        }
+ 
+        res.json({
+            success: true,
+            message: "Class deleted successfully."
+        });
+ 
+    } catch (error) {
+        console.error("Delete extra class error:", error);
+ 
+        res.status(500).json({
+            success: false,
+            message: "Unable to delete class."
+        });
+    }
+});
+ 
+ 
+// ==========================================
+// helper: build a student object from req.body
+// (keeps the ADD and UPDATE routes in sync so no
+// field, including penNumber/aadharNumber/email,
+// is ever silently dropped)
+// ==========================================
+ 
+function buildStudentPayload(body) {
+    return {
+        name: body.name || "",
+        fatherName: body.fatherName || "",
+        motherName: body.motherName || "",
+        phone: body.phone || "",
+        alternatePhone: body.alternatePhone || "",
+ 
+        rollNumber: body.rollNumber || "",
+        admissionNumber: body.admissionNumber || "",
+ 
+        penNumber: body.penNumber || "",
+        aadharNumber: body.aadharNumber || "",
+        email: (body.email || "").trim().toLowerCase(),
+ 
+        dob: body.dob || "",
+        gender: body.gender || "",
+        address: body.address || "",
+ 
+        monthlyFee: Number(body.monthlyFee) || 0,
+        registrationFee: Number(body.registrationFee) || 0,
+        conveyanceFee: Number(body.conveyanceFee) || 0,
+        bookFee: Number(body.bookFee) || 0,
+        stationaryFee: Number(body.stationaryFee) || 0,
+        examFee: Number(body.examFee) || 0,
+ 
+        unitTest1: Number(body.unitTest1) || 0,
+        unitTest2: Number(body.unitTest2) || 0,
+        halfYearly: Number(body.halfYearly) || 0,
+        annualExam: Number(body.annualExam) || 0,
+        totalMarks: Number(body.totalMarks) || 0,
+        percentage: Number(body.percentage) || 0,
+        result: body.result || "",
+        grade: body.grade || "",
+        remarks: body.remarks || "",
+ 
+        attendance: Number(body.attendance) || 0,
+        scholarship: body.scholarship || "",
+        transport: body.transport || ""
+    };
+}
+ 
+ 
+// ==========================================
+// ADD STUDENT TO CLASS
+// ==========================================
+ 
+app.post("/api/extra-classes/:classId/students", async (req, res) => {
+    try {
+        const extraClass = await ExtraClass.findById(req.params.classId);
+ 
+        if (!extraClass) {
+            return res.status(404).json({
+                success: false,
+                message: "Extra class not found."
+            });
+        }
+ 
+        const studentData = buildStudentPayload(req.body);
+ 
+        if (!studentData.name.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Student name is required."
+            });
+        }
+ 
+        // Basic Aadhar sanity check (optional field, 12 digits if provided)
+        if (
+            studentData.aadharNumber &&
+            !/^\d{12}$/.test(studentData.aadharNumber)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Aadhar number must be exactly 12 digits."
+            });
+        }
+ 
+        extraClass.students.push(studentData);
+ 
+        await extraClass.save();
+ 
+        const addedStudent =
+            extraClass.students[extraClass.students.length - 1];
+ 
+        res.status(201).json({
+            success: true,
+            message: "Student added successfully.",
+            student: addedStudent,
+            class: extraClass
+        });
+ 
+    } catch (error) {
+        console.error("Add student error:", error);
+ 
+        res.status(500).json({
+            success: false,
+            message: "Unable to add student."
+        });
+    }
+});
+ 
+ 
+// ==========================================
+// UPDATE STUDENT
+// ==========================================
+ 
+app.put("/api/extra-classes/:classId/students/:studentId", async (req, res) => {
+    try {
+        const extraClass = await ExtraClass.findById(req.params.classId);
+ 
+        if (!extraClass) {
+            return res.status(404).json({
+                success: false,
+                message: "Extra class not found."
+            });
+        }
+ 
+        const student = extraClass.students.id(req.params.studentId);
+ 
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                message: "Student not found."
+            });
+        }
+ 
+        const studentData = buildStudentPayload(req.body);
+ 
+        if (
+            studentData.aadharNumber &&
+            !/^\d{12}$/.test(studentData.aadharNumber)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Aadhar number must be exactly 12 digits."
+            });
+        }
+ 
+        Object.assign(student, studentData);
+ 
+        await extraClass.save();
+ 
+        res.json({
+            success: true,
+            message: "Student updated successfully.",
+            student
+        });
+ 
+    } catch (error) {
+        console.error("Update student error:", error);
+ 
+        res.status(500).json({
+            success: false,
+            message: "Unable to update student."
+        });
+    }
+});
+ 
+ 
+// ==========================================
+// DELETE STUDENT
+// ==========================================
+ 
+app.delete("/api/extra-classes/:classId/students/:studentId", async (req, res) => {
+    try {
+        const extraClass = await ExtraClass.findById(req.params.classId);
+ 
+        if (!extraClass) {
+            return res.status(404).json({
+                success: false,
+                message: "Extra class not found."
+            });
+        }
+ 
+        const student = extraClass.students.id(req.params.studentId);
+ 
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                message: "Student not found."
+            });
+        }
+ 
+        student.deleteOne();
+ 
+        await extraClass.save();
+ 
+        res.json({
+            success: true,
+            message: "Student deleted successfully."
+        });
+ 
+    } catch (error) {
+        console.error("Delete student error:", error);
+ 
+        res.status(500).json({
+            success: false,
+            message: "Unable to delete student."
         });
     }
 });
@@ -751,11 +1273,49 @@ app.get("/api/payments/student/:studentId", async (req, res) => {
             .sort({
                 paymentDate: 1,
                 createdAt: 1
-            });
+            })
+            .lean();
+
+        // Make sure additionalFees are included
+        const formattedPayments = payments.map(payment => ({
+            ...payment,
+
+            additionalFees: {
+                registrationFee:
+                    Number(payment.additionalFees?.registrationFee) || 0,
+
+                conveyanceFee:
+                    Number(payment.additionalFees?.conveyanceFee) || 0,
+
+                bookFee:
+                    Number(payment.additionalFees?.bookFee) || 0,
+
+                stationaryFee:
+                    Number(payment.additionalFees?.stationaryFee) || 0,
+
+                examFee:
+                    Number(payment.additionalFees?.examFee) || 0,
+
+                redCrossFee:
+                    Number(payment.additionalFees?.redCrossFee) || 0,
+
+                scoutFee:
+                    Number(payment.additionalFees?.scoutFee) || 0,
+
+                tieBalance:
+                    Number(payment.additionalFees?.tieBalance) || 0,
+
+                beltBalance:
+                    Number(payment.additionalFees?.beltBalance) || 0,
+
+                shirtPantBalance:
+                    Number(payment.additionalFees?.shirtPantBalance) || 0
+            }
+        }));
 
         res.json({
             success: true,
-            payments
+            payments: formattedPayments
         });
 
     } catch (error) {
@@ -1384,10 +1944,10 @@ app.get("/", (req, res) => {
 
 
 // Start Server
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, () => {
 
-    console.log(`Server running on http://localhost:${PORT}`);
+    console.log(`Server running on port ${PORT}`);
 
 });

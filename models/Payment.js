@@ -65,7 +65,57 @@ const paymentSchema = new mongoose.Schema(
         transactionId: {
             type: String,
             default: ""
-        }
+        },additionalFees: {
+    registrationFee: {
+        type: Number,
+        default: 0
+    },
+
+    conveyanceFee: {
+        type: Number,
+        default: 0
+    },
+
+    bookFee: {
+        type: Number,
+        default: 0
+    },
+
+    stationaryFee: {
+        type: Number,
+        default: 0
+    },
+
+    examFee: {
+        type: Number,
+        default: 0
+    },
+
+    redCrossFee: {
+        type: Number,
+        default: 0
+    },
+
+    scoutFee: {
+        type: Number,
+        default: 0
+    },
+
+    tieBalance: {
+        type: Number,
+        default: 0
+    },
+
+    beltBalance: {
+        type: Number,
+        default: 0
+    },
+
+    shirtPantBalance: {
+        type: Number,
+        default: 0
+    }
+}
     },
     {
         timestamps: true
