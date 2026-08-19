@@ -502,6 +502,304 @@ app.get("/api/teachers/:id", async (req, res) => {
 
 });
 
+
+// ==========================================
+// UPDATE TEACHER
+// ==========================================
+
+app.put("/api/teachers/:id", async (req, res) => {
+
+    try {
+
+        const teacherId = req.params.id;
+
+        const {
+            employeeId,
+            name,
+            email,
+            phone,
+            gender,
+            qualification,
+            joiningDate,
+            role,
+            status,
+            assignedClasses,
+            permissions,
+            profile
+        } = req.body;
+
+
+        // Find teacher
+        const teacher =
+            await Teacher.findById(
+                teacherId
+            );
+
+
+        if (!teacher) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message:
+                    "Teacher not found."
+
+            });
+
+        }
+
+
+        // ==========================================
+        // CHECK DUPLICATE EMAIL
+        // ==========================================
+
+        if (
+            email &&
+            email.toLowerCase() !==
+            teacher.email.toLowerCase()
+        ) {
+
+            const existingEmail =
+                await Teacher.findOne({
+                    email:
+                        email.toLowerCase(),
+
+                    _id: {
+                        $ne:
+                            teacherId
+                    }
+                });
+
+
+            if (existingEmail) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "Another teacher with this email already exists."
+
+                });
+
+            }
+
+        }
+
+
+        // ==========================================
+        // CHECK DUPLICATE EMPLOYEE ID
+        // ==========================================
+
+        if (
+            employeeId &&
+            employeeId !==
+            teacher.employeeId
+        ) {
+
+            const existingEmployee =
+                await Teacher.findOne({
+
+                    employeeId:
+
+                        employeeId,
+
+                    _id: {
+                        $ne:
+                            teacherId
+                    }
+
+                });
+
+
+            if (existingEmployee) {
+
+                return res.status(400).json({
+
+                    success: false,
+
+                    message:
+                        "Another teacher with this Employee ID already exists."
+
+                });
+
+            }
+
+        }
+
+
+        // ==========================================
+        // UPDATE BASIC INFORMATION
+        // ==========================================
+
+        if (employeeId !== undefined)
+            teacher.employeeId =
+                employeeId;
+
+        if (name !== undefined)
+            teacher.name =
+                name;
+
+        if (email !== undefined)
+            teacher.email =
+                email.toLowerCase();
+
+        if (phone !== undefined)
+            teacher.phone =
+                phone;
+
+        if (gender !== undefined)
+            teacher.gender =
+                gender;
+
+        if (qualification !== undefined)
+            teacher.qualification =
+                qualification;
+
+        if (joiningDate !== undefined)
+            teacher.joiningDate =
+                joiningDate;
+
+        if (role !== undefined)
+            teacher.role =
+                role;
+
+        if (status !== undefined)
+            teacher.status =
+                status;
+
+
+        // ==========================================
+        // ASSIGNED CLASSES
+        // ==========================================
+
+        if (
+            assignedClasses !== undefined
+        ) {
+
+            teacher.assignedClasses =
+                assignedClasses;
+
+        }
+
+
+        // ==========================================
+        // PERMISSIONS
+        // ==========================================
+
+        if (
+            permissions &&
+            typeof permissions === "object"
+        ) {
+
+            teacher.permissions =
+                permissions;
+
+        }
+
+
+        // ==========================================
+        // PROFILE
+        // ==========================================
+
+        if (
+            profile &&
+            typeof profile === "object"
+        ) {
+
+            teacher.profile =
+                profile;
+
+        }
+
+
+        // ==========================================
+        // SAVE
+        // ==========================================
+
+        await teacher.save();
+
+
+        // ==========================================
+        // RESPONSE
+        // ==========================================
+
+        res.status(200).json({
+
+            success: true,
+
+            message:
+                "Teacher details updated successfully.",
+
+            teacher: {
+                teacherId:
+                    teacher.teacherId,
+
+                employeeId:
+                    teacher.employeeId,
+
+                name:
+                    teacher.name,
+
+                email:
+                    teacher.email,
+
+                phone:
+                    teacher.phone,
+
+                gender:
+                    teacher.gender,
+
+                qualification:
+                    teacher.qualification,
+
+                joiningDate:
+                    teacher.joiningDate,
+
+                role:
+                    teacher.role,
+
+                status:
+                    teacher.status,
+
+                assignedClasses:
+                    teacher.assignedClasses,
+
+                permissions:
+                    teacher.permissions,
+
+                profile:
+                    teacher.profile
+            }
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Update teacher error:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to update teacher.",
+
+            error:
+                error.message
+
+        });
+
+    }
+
+});
+
 // ==========================================
 // GET SINGLE TEACHER
 // ==========================================
@@ -1388,56 +1686,89 @@ app.get("/api/teachers", async (req, res) => {
 // ==========================================
 
 app.get("/api/teachers/:id", async (req, res) => {
+    try {
+
+        const teacher = await Teacher.findById(req.params.id);
+
+        if (!teacher) {
+            return res.status(404).json({
+                success: false,
+                message: "Teacher not found."
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            teacher
+        });
+
+    } catch (error) {
+
+        console.error("Fetch teacher error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch teacher."
+        });
+    }
+});
+
+// ==========================================
+// RESET TEACHER PASSWORD
+// (Admin sets a new password. We NEVER read
+// back or display the old password — bcrypt
+// hashes cannot be reversed to plaintext.)
+// ==========================================
+
+app.put("/api/teachers/:id/reset-password", async (req, res) => {
 
     try {
 
-        const teacher = await Teacher
-            .findById(req.params.id)
-            .select("-password");
+        const { newPassword } = req.body;
 
+        if (!newPassword || newPassword.trim().length < 6) {
 
-        if (!teacher) {
-
-            return res.status(404).json({
-
+            return res.status(400).json({
                 success: false,
-
-                message: "Teacher not found."
-
+                message: "New password must be at least 6 characters."
             });
 
         }
 
+        const teacher = await Teacher.findById(req.params.id);
+
+        if (!teacher) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Teacher not found."
+            });
+
+        }
+
+        const hashedPassword = await bcrypt.hash(newPassword.trim(), 10);
+
+        teacher.password = hashedPassword;
+
+        await teacher.save();
 
         res.status(200).json({
-
             success: true,
-
-            teacher
-
+            message: "Password reset successfully."
         });
-
 
     } catch (error) {
 
-        console.error(
-            "Fetch teacher error:",
-            error
-        );
-
+        console.error("Reset teacher password error:", error);
 
         res.status(500).json({
-
             success: false,
-
-            message: "Unable to fetch teacher."
-
+            message: "Unable to reset password."
         });
 
     }
 
 });
-
 
 // ==========================================
 // GET ALL STUDENTS
