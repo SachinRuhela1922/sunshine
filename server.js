@@ -7,7 +7,10 @@ const Teacher = require("./models/Teacher");
 const Payment = require("./models/Payment");
 const Attendance = require("./models/Attendance");
 const ExtraClass = require("./models/ExtraClass");
-
+const ExamMarks = require("./models/ExamMarks");
+const AdmitCard = require("./models/AdmitCard");
+const Notice = require("./models/Notice");
+const TimeTable = require("./models/TimeTable");
 const app = express();
 
 
@@ -1773,6 +1776,757 @@ app.post("/api/teachers/login", async (req, res) => {
 
 });
 
+// ==========================================
+// SAVE / UPDATE EXAM MARKS
+// MAIN STUDENT COLLECTION
+// ==========================================
+
+app.post("/api/exam-marks", async (req, res) => {
+
+    try {
+
+        const {
+            exam,
+            className,
+            studentMongoId,
+            marks
+        } = req.body;
+
+
+        // ==========================================
+        // VALIDATION
+        // ==========================================
+
+        if (
+            !exam ||
+            !className ||
+            !studentMongoId
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Exam, class and student are required."
+            });
+
+        }
+
+
+        // ==========================================
+        // FIND STUDENT FROM MAIN STUDENT COLLECTION
+        // ==========================================
+
+        const student =
+            await Student.findById(studentMongoId);
+
+
+        if (!student) {
+
+            return res.status(404).json({
+                success: false,
+                message:
+                    "Student not found."
+            });
+
+        }
+
+
+        // ==========================================
+        // VERIFY STUDENT BELONGS TO SELECTED CLASS
+        // ==========================================
+
+        if (
+            String(student.academic?.class || "")
+                .trim() !== String(className).trim()
+        ) {
+
+            return res.status(400).json({
+                success: false,
+                message:
+                    "Student does not belong to this class."
+            });
+
+        }
+
+
+        // ==========================================
+        // MARKS ARRAY
+        // ==========================================
+
+        const marksArray =
+            Array.isArray(marks)
+                ? marks
+                : [];
+
+
+        // ==========================================
+        // CALCULATE TOTALS
+        // ==========================================
+
+        let totalMaxMarks = 0;
+        let totalObtainedMarks = 0;
+
+
+        const formattedMarks =
+            marksArray.map(item => {
+
+                const maxMarks =
+                    Math.max(
+                        Number(item.maxMarks) || 0,
+                        0
+                    );
+
+                const obtainedMarks =
+                    Math.max(
+                        Number(item.obtainedMarks) || 0,
+                        0
+                    );
+
+
+                totalMaxMarks += maxMarks;
+                totalObtainedMarks += obtainedMarks;
+
+
+                return {
+
+                    subjectName:
+                        item.subjectName || "",
+
+                    maxMarks,
+
+                    obtainedMarks:
+                        Math.min(
+                            obtainedMarks,
+                            maxMarks
+                        )
+
+                };
+
+            });
+
+
+        // ==========================================
+        // PERCENTAGE
+        // ==========================================
+
+        const percentage =
+            totalMaxMarks > 0
+                ? Number(
+                    (
+                        (
+                            totalObtainedMarks /
+                            totalMaxMarks
+                        ) * 100
+                    ).toFixed(2)
+                )
+                : 0;
+
+
+        // ==========================================
+        // RESULT
+        // ==========================================
+
+        const result =
+            percentage >= 33
+                ? "Pass"
+                : "Fail";
+
+
+        // ==========================================
+        // FIND EXISTING RECORD
+        // ==========================================
+
+        let examMarks =
+            await ExamMarks.findOne({
+
+                exam,
+
+                className,
+
+                studentMongoId
+
+            });
+
+
+        // ==========================================
+        // UPDATE EXISTING
+        // ==========================================
+
+        if (examMarks) {
+
+            examMarks.marks =
+                formattedMarks;
+
+            examMarks.totalMaxMarks =
+                totalMaxMarks;
+
+            examMarks.totalObtainedMarks =
+                totalObtainedMarks;
+
+            examMarks.percentage =
+                percentage;
+
+            examMarks.result =
+                result;
+
+
+            // Student latest information
+            examMarks.studentId =
+                student.studentId || "";
+
+            examMarks.studentName =
+                student.studentName || "";
+
+            examMarks.fatherName =
+                student.fatherName || "";
+
+            examMarks.motherName =
+                student.motherName || "";
+
+            examMarks.rollNumber =
+                student.rollNumber || "";
+
+            examMarks.admissionNumber =
+                student.admissionNumber || "";
+
+            examMarks.phone =
+                student.phone || "";
+
+            examMarks.penNumber =
+                student.penNumber || "";
+
+            examMarks.dob =
+                student.dob || "";
+
+            examMarks.address =
+                student.address || "";
+
+            examMarks.gender =
+                student.gender || "";
+
+
+            await examMarks.save();
+
+
+            return res.status(200).json({
+
+                success: true,
+
+                message:
+                    "Exam marks updated successfully.",
+
+                examMarks
+
+            });
+
+        }
+
+
+        // ==========================================
+        // CREATE NEW RECORD
+        // ==========================================
+
+        examMarks =
+            await ExamMarks.create({
+
+                exam,
+
+                className,
+
+                studentMongoId:
+                    student._id,
+
+                studentId:
+                    student.studentId || "",
+
+                studentName:
+                    student.studentName || "",
+
+                fatherName:
+                    student.fatherName || "",
+
+                motherName:
+                    student.motherName || "",
+
+                rollNumber:
+                    student.rollNumber || "",
+
+                admissionNumber:
+                    student.admissionNumber || "",
+
+                phone:
+                    student.phone || "",
+
+                penNumber:
+                    student.penNumber || "",
+
+                dob:
+                    student.dob || "",
+
+                address:
+                    student.address || "",
+
+                gender:
+                    student.gender || "",
+
+                marks:
+                    formattedMarks,
+
+                totalMaxMarks,
+
+                totalObtainedMarks,
+
+                percentage,
+
+                result
+
+            });
+
+
+        // ==========================================
+        // RESPONSE
+        // ==========================================
+
+        res.status(201).json({
+
+            success: true,
+
+            message:
+                "Exam marks saved successfully.",
+
+            examMarks
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Save exam marks error:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to save exam marks.",
+
+            error:
+                error.message
+
+        });
+
+    }
+
+});
+
+// ==========================================
+// GET ALL UNIQUE CLASSES FROM STUDENTS
+// ==========================================
+
+app.get("/api/exam/classes", async (req, res) => {
+
+    try {
+
+        const classes =
+            await Student.distinct(
+                "academic.class"
+            );
+
+
+        const formattedClasses =
+            classes
+                .filter(
+                    className =>
+                        className &&
+                        String(className).trim()
+                )
+                .map(
+                    className =>
+                        String(className).trim()
+                )
+                .sort(
+                    (a, b) =>
+                        a.localeCompare(
+                            b,
+                            undefined,
+                            {
+                                numeric: true
+                            }
+                        )
+                );
+
+
+        res.status(200).json({
+
+            success: true,
+
+            classes:
+                formattedClasses
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Fetch exam classes error:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            success: false,
+
+            message:
+                "Unable to fetch classes."
+
+        });
+
+    }
+
+});
+
+// ==========================================
+// GET STUDENTS FOR EXAM BY CLASS
+// ==========================================
+
+app.get(
+    "/api/exam/classes/:className/students",
+    async (req, res) => {
+
+        try {
+
+            const className =
+                decodeURIComponent(
+                    req.params.className
+                );
+
+
+            const students =
+                await Student.find({
+
+                    "academic.class":
+                        className
+
+                })
+                .sort({
+
+                    "academic.section": 1,
+
+                    rollNumber: 1,
+
+                    studentName: 1
+
+                })
+                .lean();
+
+
+            res.status(200).json({
+
+                success: true,
+
+                class:
+                    className,
+
+                count:
+                    students.length,
+
+                students
+
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "Fetch exam class students error:",
+                error
+            );
+
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Unable to fetch class students."
+
+            });
+
+        }
+
+    }
+);
+
+// ==========================================
+// GET EXAM MARKS
+// ==========================================
+
+app.get(
+    "/api/exam-marks/:exam/:className",
+    async (req, res) => {
+
+        try {
+
+            const exam =
+                decodeURIComponent(
+                    req.params.exam
+                );
+
+            const className =
+                decodeURIComponent(
+                    req.params.className
+                );
+
+
+            const examMarks =
+                await ExamMarks.find({
+
+                    exam,
+
+                    className
+
+                })
+                .sort({
+
+                    rollNumber: 1,
+
+                    studentName: 1
+
+                })
+                .lean();
+
+
+            res.status(200).json({
+
+                success: true,
+
+                exam,
+
+                className,
+
+                count:
+                    examMarks.length,
+
+                examMarks
+
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "Fetch exam marks error:",
+                error
+            );
+
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Unable to fetch exam marks."
+
+            });
+
+        }
+
+    }
+);
+
+
+// ==========================================
+// GET ALL EXAM MARKS (every class, every exam)
+// Used by result.html to build the class/student
+// browser without knowing exam names in advance.
+// ==========================================
+
+app.get(
+    "/api/exam-marks",
+    async (req, res) => {
+
+        try {
+
+            const examMarks =
+                await ExamMarks.find({})
+                    .sort({
+                        className: 1,
+                        rollNumber: 1,
+                        studentName: 1
+                    })
+                    .lean();
+
+            res.status(200).json({
+
+                success: true,
+
+                count:
+                    examMarks.length,
+
+                examMarks
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Fetch all exam marks error:",
+                error
+            );
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    "Unable to fetch exam marks."
+
+            });
+
+        }
+
+    }
+);
+// ==========================================
+// UPDATE EXAM MARKS BY ID
+// ==========================================
+
+app.put("/api/exam-marks/:id", async (req, res) => {
+
+    try {
+
+        const examId = req.params.id;
+        const {
+            exam,
+            className,
+            studentMongoId,
+            studentId,
+            studentName,
+            rollNumber,
+            admissionNumber,
+            fatherName,
+            motherName,
+            marks
+        } = req.body;
+
+        // ==========================================
+        // VALIDATION
+        // ==========================================
+
+        if (!examId) {
+            return res.status(400).json({
+                success: false,
+                message: "Exam ID is required."
+            });
+        }
+
+        // ==========================================
+        // FIND EXISTING EXAM MARKS
+        // ==========================================
+
+        const examMarks = await ExamMarks.findById(examId);
+
+        if (!examMarks) {
+            return res.status(404).json({
+                success: false,
+                message: "Exam marks not found."
+            });
+        }
+
+        // ==========================================
+        // MARKS ARRAY
+        // ==========================================
+
+        const marksArray = Array.isArray(marks) ? marks : [];
+
+        // ==========================================
+        // CALCULATE TOTALS
+        // ==========================================
+
+        let totalMaxMarks = 0;
+        let totalObtainedMarks = 0;
+
+        const formattedMarks = marksArray.map(item => {
+
+            const maxMarks = Math.max(Number(item.maxMarks) || 0, 0);
+            const obtainedMarks = Math.max(Number(item.obtainedMarks) || 0, 0);
+
+            totalMaxMarks += maxMarks;
+            totalObtainedMarks += obtainedMarks;
+
+            return {
+                subjectName: item.subjectName || "",
+                maxMarks: maxMarks,
+                obtainedMarks: Math.min(obtainedMarks, maxMarks)
+            };
+
+        });
+
+        // ==========================================
+        // PERCENTAGE
+        // ==========================================
+
+        const percentage = totalMaxMarks > 0
+            ? Number(((totalObtainedMarks / totalMaxMarks) * 100).toFixed(2))
+            : 0;
+
+        // ==========================================
+        // RESULT
+        // ==========================================
+
+        const result = percentage >= 33 ? "Pass" : "Fail";
+
+        // ==========================================
+        // UPDATE EXAM MARKS
+        // ==========================================
+
+        examMarks.exam = exam || examMarks.exam;
+        examMarks.className = className || examMarks.className;
+        examMarks.studentMongoId = studentMongoId || examMarks.studentMongoId;
+        examMarks.studentId = studentId || examMarks.studentId;
+        examMarks.studentName = studentName || examMarks.studentName;
+        examMarks.rollNumber = rollNumber || examMarks.rollNumber;
+        examMarks.admissionNumber = admissionNumber || examMarks.admissionNumber;
+        examMarks.fatherName = fatherName || examMarks.fatherName;
+        examMarks.motherName = motherName || examMarks.motherName;
+        examMarks.marks = formattedMarks;
+        examMarks.totalMaxMarks = totalMaxMarks;
+        examMarks.totalObtainedMarks = totalObtainedMarks;
+        examMarks.percentage = percentage;
+        examMarks.result = result;
+
+        await examMarks.save();
+
+        // ==========================================
+        // RESPONSE
+        // ==========================================
+
+        res.status(200).json({
+            success: true,
+            message: "Exam marks updated successfully.",
+            examMarks
+        });
+
+    } catch (error) {
+
+        console.error("Update exam marks error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to update exam marks.",
+            error: error.message
+        });
+
+    }
+
+});
+
 
 // Add Teacher
 app.post("/api/teachers", async (req, res) => {
@@ -1933,6 +2687,679 @@ app.post("/api/teachers", async (req, res) => {
     }
 
 });
+
+
+app.get("/api/admitcard/download", async (req, res) => {
+    try {
+        const { exam, className } = req.query;
+
+        if (!exam || !className) {
+            return res.status(400).json({
+                success: false,
+                message: "Exam and class are required"
+            });
+        }
+
+        const admitCard = await AdmitCard.findOne({
+            exam: exam,
+            className: className
+        });
+
+        if (!admitCard) {
+            return res.status(404).json({
+                success: false,
+                message: "Admit card schedule not found"
+            });
+        }
+
+        const students = await Student.find({
+            "academic.class": className
+        }).lean();
+
+        if (!students.length) {
+            return res.status(404).json({
+                success: false,
+                message: "No students found in this class"
+            });
+        }
+
+        let csv = "";
+
+        csv += [
+            "Student Name",
+            "Student ID",
+            "Admission Number",
+            "Roll Number",
+            "Father Name",
+            "Mother Name",
+            "DOB",
+            "Gender",
+            "Class",
+            "Section",
+            "Exam",
+            "Subject",
+            "Exam Date",
+            "Exam Day"
+        ].join(",") + "\n";
+
+        students.forEach(student => {
+
+            admitCard.subjects.forEach(subject => {
+
+                const row = [
+                    student.studentName || "",
+                    student.studentId || "",
+                    student.admissionNumber || "",
+                    student.rollNumber || "",
+                    student.father?.name || "",
+                    student.mother?.name || "",
+                    student.dob
+                        ? new Date(student.dob).toLocaleDateString("en-IN")
+                        : "",
+                    student.gender || "",
+                    student.academic?.class || "",
+                    student.academic?.section || "",
+                    exam,
+                    subject.subject || "",
+                    subject.date || "",
+                    subject.day || ""
+                ];
+
+                csv += row
+                    .map(value => `"${String(value).replace(/"/g, '""')}"`)
+                    .join(",") + "\n";
+            });
+        });
+
+        res.setHeader(
+            "Content-Type",
+            "text/csv; charset=utf-8"
+        );
+
+        res.setHeader(
+            "Content-Disposition",
+            `attachment; filename="Admit_Cards_${exam}_${className}.csv"`
+        );
+
+        res.send("\uFEFF" + csv);
+
+    } catch (error) {
+
+        console.error("Admit card download error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+
+app.post("/api/admitcard", async (req, res) => {
+    try {
+        const { exam, className, subjects } = req.body;
+
+        if (!exam || !className || !Array.isArray(subjects) || subjects.length === 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Exam, class and subjects are required"
+            });
+        }
+
+        const AdmitCard = require("./models/AdmitCard");
+
+        const admitCard = await AdmitCard.findOneAndUpdate(
+            {
+                exam: exam,
+                className: className
+            },
+            {
+                exam: exam,
+                className: className,
+                subjects: subjects
+            },
+            {
+                new: true,
+                upsert: true,
+                runValidators: true
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Admit card saved successfully",
+            data: admitCard
+        });
+
+    } catch (error) {
+        console.error("Admit card save error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to save admit card",
+            error: error.message
+        });
+    }
+});
+
+
+
+// ==============================
+// NOTICE BOARD
+// ==============================
+
+// GET ALL NOTICES
+app.get("/api/notices", async (req, res) => {
+
+    try {
+
+        const notices = await Notice
+            .find()
+            .sort({ createdAt: -1 });
+
+        res.json({
+            success: true,
+            notices
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch notices"
+        });
+    }
+});
+
+
+// ADD NOTICE
+app.post("/api/notices", async (req, res) => {
+
+    try {
+
+        const { notice } = req.body;
+
+        if (!notice || !notice.trim()) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Notice is required"
+            });
+        }
+
+        const newNotice =
+            await Notice.create({
+                notice: notice.trim()
+            });
+
+        res.status(201).json({
+            success: true,
+            notice: newNotice
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to add notice"
+        });
+    }
+});
+
+
+// DELETE NOTICE
+app.delete("/api/notices/:id", async (req, res) => {
+
+    try {
+
+        const deleted =
+            await Notice.findByIdAndDelete(
+                req.params.id
+            );
+
+        if (!deleted) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Notice not found"
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Notice deleted successfully"
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to delete notice"
+        });
+    }
+});
+
+
+app.post("/api/students/login", async (req, res) => {
+    try {
+        const { dob } = req.body;
+
+        if (!dob) {
+            return res.status(400).json({
+                success: false,
+                message: "Date of birth is required."
+            });
+        }
+
+        // Expected format: DD/MM/YYYY
+        const parts = dob.trim().split("/");
+
+        if (parts.length !== 3) {
+            return res.status(400).json({
+                success: false,
+                message: "Please enter DOB in DD/MM/YYYY format."
+            });
+        }
+
+        const day = Number(parts[0]);
+        const month = Number(parts[1]);
+        const year = Number(parts[2]);
+
+        if (
+            !day ||
+            !month ||
+            !year ||
+            day < 1 ||
+            day > 31 ||
+            month < 1 ||
+            month > 12 ||
+            year < 1900
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid date of birth."
+            });
+        }
+
+        /*
+         * MongoDB Date can contain time.
+         * So don't search using exact Date.
+         * Search between start and end of that date.
+         */
+
+        const startDate = new Date(
+            year,
+            month - 1,
+            day,
+            0,
+            0,
+            0,
+            0
+        );
+
+        const endDate = new Date(
+            year,
+            month - 1,
+            day + 1,
+            0,
+            0,
+            0,
+            0
+        );
+
+        const student = await Student.findOne({
+            dob: {
+                $gte: startDate,
+                $lt: endDate
+            }
+        }).select("-__v");
+
+        if (!student) {
+            return res.status(401).json({
+                success: false,
+                message: "Invalid date of birth or student not found."
+            });
+        }
+
+        // Send student data to frontend
+        return res.json({
+            success: true,
+            message: "Student login successful.",
+            student: student
+        });
+
+    } catch (error) {
+        console.error("Student login error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: "Server error during student login."
+        });
+    }
+});
+
+app.get("/api/exam-marks/student/:studentMongoId", async (req, res) => {
+    try {
+        const examMarks = await ExamMarks.find({
+            studentMongoId: req.params.studentMongoId
+        }).sort({ createdAt: 1 });
+
+        res.json({
+            success: true,
+            examMarks
+        });
+
+    } catch (error) {
+        console.error(error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch student results."
+        });
+    }
+});
+
+
+app.get("/api/student/exam-marks/:studentId", async (req, res) => {
+    try {
+        const { studentId } = req.params;
+
+        const examMarks = await ExamMarks.find({
+            studentId: studentId
+        }).sort({
+            createdAt: 1
+        });
+
+        res.json({
+            success: true,
+            examMarks
+        });
+
+    } catch (error) {
+        console.error("Student exam marks error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch exam marks."
+        });
+    }
+});
+
+
+app.get("/api/student/attendance/:studentId", async (req, res) => {
+    try {
+        const { studentId } = req.params;
+
+        // Student collection se student find karo
+        const student = await Student.findOne({
+            studentId: studentId
+        }).lean();
+
+        if (!student) {
+            return res.status(404).json({
+                success: false,
+                message: "Student not found."
+            });
+        }
+
+        // Attendance collection me MongoDB _id se search karo
+        const attendance = await Attendance.find({
+            "students.studentId": student._id
+        })
+        .sort({ date: -1 })
+        .lean();
+
+        // Sirf logged-in student ka attendance record nikalo
+        const studentAttendance = attendance.map(record => {
+
+            const studentRecord =
+                record.students.find(
+                    item =>
+                        String(item.studentId) ===
+                        String(student._id)
+                );
+
+            return {
+                _id: record._id,
+                date: record.date,
+                className: record.className,
+                session: record.session,
+                studentId: studentRecord?.studentId || student._id,
+                studentName: studentRecord?.studentName || student.studentName,
+                rollNumber: studentRecord?.rollNumber || student.rollNumber,
+                status: studentRecord?.status || "Absent"
+            };
+
+        });
+
+        res.json({
+            success: true,
+            attendance: studentAttendance
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Student attendance error:",
+            error
+        );
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to load student attendance."
+        });
+
+    }
+});
+
+
+// ===============================
+// TIME TABLE APIs
+// ===============================
+
+// GET ALL TIMETABLES
+app.get("/api/timetable", async (req, res) => {
+    try {
+
+        const timetables = await TimeTable.find()
+            .sort({ season: 1 });
+
+        res.json({
+            success: true,
+            timetables
+        });
+
+    } catch (error) {
+
+        console.error("Fetch timetable error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch timetable."
+        });
+
+    }
+});
+
+
+// GET ONE TIMETABLE
+app.get("/api/timetable/:season", async (req, res) => {
+    try {
+
+        const timetable = await TimeTable.findOne({
+            season: req.params.season
+        });
+
+        res.json({
+            success: true,
+            timetable
+        });
+
+    } catch (error) {
+
+        console.error("Fetch timetable error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch timetable."
+        });
+
+    }
+});
+
+
+// CREATE / UPDATE TIMETABLE
+app.post("/api/timetable", async (req, res) => {
+    try {
+
+        const {
+            season,
+            teacherTiming,
+            studentTiming,
+            prayerBell,
+            lectures
+        } = req.body;
+
+        if (!season) {
+            return res.status(400).json({
+                success: false,
+                message: "Season is required."
+            });
+        }
+
+        const timetable = await TimeTable.findOneAndUpdate(
+            { season },
+
+            {
+                season,
+                teacherTiming: teacherTiming || "",
+                studentTiming: studentTiming || "",
+                prayerBell: prayerBell || "",
+                lectures: Array.isArray(lectures)
+                    ? lectures
+                    : []
+            },
+
+            {
+                new: true,
+                upsert: true,
+                runValidators: true
+            }
+        );
+
+        res.json({
+            success: true,
+            message: `${season} timetable saved successfully.`,
+            timetable
+        });
+
+    } catch (error) {
+
+        console.error("Save timetable error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to save timetable."
+        });
+
+    }
+});
+
+
+// UPDATE TIMETABLE
+app.put("/api/timetable/:id", async (req, res) => {
+    try {
+
+        const {
+            season,
+            teacherTiming,
+            studentTiming,
+            prayerBell,
+            lectures
+        } = req.body;
+
+        const timetable =
+            await TimeTable.findByIdAndUpdate(
+                req.params.id,
+
+                {
+                    season,
+                    teacherTiming,
+                    studentTiming,
+                    prayerBell,
+                    lectures
+                },
+
+                {
+                    new: true,
+                    runValidators: true
+                }
+            );
+
+        if (!timetable) {
+            return res.status(404).json({
+                success: false,
+                message: "Timetable not found."
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Timetable updated successfully.",
+            timetable
+        });
+
+    } catch (error) {
+
+        console.error("Update timetable error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to update timetable."
+        });
+
+    }
+});
+
+
+// DELETE TIMETABLE
+app.delete("/api/timetable/:id", async (req, res) => {
+    try {
+
+        const timetable =
+            await TimeTable.findByIdAndDelete(
+                req.params.id
+            );
+
+        if (!timetable) {
+            return res.status(404).json({
+                success: false,
+                message: "Timetable not found."
+            });
+        }
+
+        res.json({
+            success: true,
+            message: "Timetable deleted successfully."
+        });
+
+    } catch (error) {
+
+        console.error("Delete timetable error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to delete timetable."
+        });
+
+    }
+});
+
 
 
 // Test route
