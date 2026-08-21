@@ -117,7 +117,12 @@ const examMarksSchema = new mongoose.Schema(
         result: {
             type: String,
             default: ""
-        }
+        },
+        division: {
+    type: String,
+    default: "",
+    enum: ["", "Ist Division", "IInd Division", "IIIrd Division", "Fail"]
+}
     },
     {
         timestamps: true

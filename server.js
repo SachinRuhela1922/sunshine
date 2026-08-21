@@ -860,27 +860,15 @@ app.post("/api/payments", async (req, res) => {
     try {
 
         const {
-            studentMongoId,
-            monthlyFee,
-            amount,
-            month,
-            paymentDate,
-            paymentMode,
-            transactionId,
-
-            // Extra Fees
-            registrationFee,
-            conveyanceFee,
-            bookFee,
-            stationaryFee,
-            examFee,
-            redCrossFee,
-            scoutFee,
-            tieBalance,
-            beltBalance,
-            shirtPantBalance
-
-        } = req.body;
+    studentMongoId,
+    monthlyFee,
+    amount,
+    month,
+    paymentDate,
+    paymentMode,
+    transactionId,
+    additionalFees = {}
+} = req.body;
 
 
         // ==========================================
@@ -917,35 +905,34 @@ app.post("/api/payments", async (req, res) => {
         // ==========================================
 
         const registrationFeeNumber =
-            Math.max(Number(registrationFee) || 0, 0);
+    Math.max(Number(additionalFees.registrationFee) || 0, 0);
 
-        const conveyanceFeeNumber =
-            Math.max(Number(conveyanceFee) || 0, 0);
+const conveyanceFeeNumber =
+    Math.max(Number(additionalFees.conveyanceFee) || 0, 0);
 
-        const bookFeeNumber =
-            Math.max(Number(bookFee) || 0, 0);
+const bookFeeNumber =
+    Math.max(Number(additionalFees.bookFee) || 0, 0);
 
-        const stationaryFeeNumber =
-            Math.max(Number(stationaryFee) || 0, 0);
+const stationaryFeeNumber =
+    Math.max(Number(additionalFees.stationaryFee) || 0, 0);
 
-        const examFeeNumber =
-            Math.max(Number(examFee) || 0, 0);
+const examFeeNumber =
+    Math.max(Number(additionalFees.examFee) || 0, 0);
 
-        const redCrossFeeNumber =
-            Math.max(Number(redCrossFee) || 0, 0);
+const redCrossFeeNumber =
+    Math.max(Number(additionalFees.redCrossFee) || 0, 0);
 
-        const scoutFeeNumber =
-            Math.max(Number(scoutFee) || 0, 0);
+const scoutFeeNumber =
+    Math.max(Number(additionalFees.scoutFee) || 0, 0);
 
-        const tieBalanceNumber =
-            Math.max(Number(tieBalance) || 0, 0);
+const tieBalanceNumber =
+    Math.max(Number(additionalFees.tieBalance) || 0, 0);
 
-        const beltBalanceNumber =
-            Math.max(Number(beltBalance) || 0, 0);
+const beltBalanceNumber =
+    Math.max(Number(additionalFees.beltBalance) || 0, 0);
 
-        const shirtPantBalanceNumber =
-            Math.max(Number(shirtPantBalance) || 0, 0);
-
+const shirtPantBalanceNumber =
+    Math.max(Number(additionalFees.shirtPantBalance) || 0, 0);
 
         // ==========================================
         // FIND PREVIOUS PAYMENTS
@@ -2743,7 +2730,8 @@ app.put("/api/exam-marks/:id", async (req, res) => {
             admissionNumber,
             fatherName,
             motherName,
-            marks
+            marks,
+            division
         } = req.body;
 
         // ==========================================
@@ -2831,6 +2819,7 @@ app.put("/api/exam-marks/:id", async (req, res) => {
         examMarks.totalObtainedMarks = totalObtainedMarks;
         examMarks.percentage = percentage;
         examMarks.result = result;
+        examMarks.division = division !== undefined ? division : examMarks.division;   // 👈 ye line add karo
 
         await examMarks.save();
 
@@ -3691,7 +3680,34 @@ app.delete("/api/timetable/:id", async (req, res) => {
     }
 });
 
+// DELETE student by id
+// DELETE student by id (Mongo _id)
+app.delete("/api/students/:id", async (req, res) => {
+    try {
+        const { id } = req.params;
 
+        const deletedStudent = await Student.findByIdAndDelete(id);
+
+        if (!deletedStudent) {
+            return res.status(404).json({
+                success: false,
+                message: "Student not found."
+            });
+        }
+
+        res.status(200).json({
+            success: true,
+            message: "Student deleted successfully.",
+            student: deletedStudent
+        });
+    } catch (error) {
+        console.error("Delete student error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Unable to delete student."
+        });
+    }
+});
 
 // Test route
 app.get("/", (req, res) => {
