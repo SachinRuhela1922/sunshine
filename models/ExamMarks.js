@@ -121,7 +121,7 @@ const examMarksSchema = new mongoose.Schema(
         division: {
     type: String,
     default: "",
-    enum: ["", "Ist Division", "IInd Division", "IIIrd Division", "Fail"]
+    enum: ["", "Ist Division", "IInd Division", "IIIrd Division", "Fail","Pass"]
 }
     },
     {

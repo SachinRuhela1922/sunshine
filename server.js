@@ -3709,6 +3709,80 @@ app.delete("/api/students/:id", async (req, res) => {
     }
 });
 
+// ==========================================
+// DELETE TEACHER
+// ==========================================
+
+app.delete("/api/teachers/:id", async (req, res) => {
+
+    try {
+
+        const teacher = await Teacher.findByIdAndDelete(
+            req.params.id
+        );
+
+
+        if (!teacher) {
+
+            return res.status(404).json({
+
+                success: false,
+
+                message: "Teacher not found."
+
+            });
+
+        }
+
+
+        res.status(200).json({
+
+            success: true,
+
+            message: "Teacher deleted successfully."
+
+        });
+
+
+    } catch (error) {
+
+        console.error(
+            "Delete teacher error:",
+            error
+        );
+
+
+        res.status(500).json({
+
+            success: false,
+
+            message: "Unable to delete teacher."
+
+        });
+
+    }
+
+});
+
+
+// DELETE /api/payments/:paymentId
+app.delete('/api/payments/:paymentId', async (req, res) => {
+    try {
+        const { paymentId } = req.params;
+
+        const deletedPayment = await Payment.findByIdAndDelete(paymentId);
+
+        if (!deletedPayment) {
+            return res.status(404).json({ success: false, message: 'Payment record not found.' });
+        }
+
+        return res.status(200).json({ success: true, message: 'Payment deleted successfully.' });
+    } catch (error) {
+        console.error('Error deleting payment:', error);
+        return res.status(500).json({ success: false, message: 'Server error while deleting payment.' });
+    }
+});
+
 // Test route
 app.get("/", (req, res) => {
 

@@ -2,16 +2,19 @@ const mongoose = require("mongoose");
 
 const lectureSchema = new mongoose.Schema(
     {
+        type: {
+            type: String,
+            enum: ["lecture", "lunch"],
+            default: "lecture"
+        },
         lectureNumber: {
             type: Number,
-            required: true
+            required: false // Lunch break ke paas number nahi hoga
         },
-
         from: {
             type: String,
             required: true
         },
-
         to: {
             type: String,
             required: true
@@ -30,22 +33,18 @@ const timeTableSchema = new mongoose.Schema(
             required: true,
             unique: true
         },
-
         teacherTiming: {
             type: String,
             default: ""
         },
-
         studentTiming: {
             type: String,
             default: ""
         },
-
         prayerBell: {
             type: String,
             default: ""
         },
-
         lectures: {
             type: [lectureSchema],
             default: []
