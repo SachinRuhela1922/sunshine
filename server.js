@@ -4045,6 +4045,48 @@ app.post("/api/classes", async (req, res) => {
         });
     }
 });
+
+
+// ================= CLASS-WISE STUDENT COUNTS =================
+
+app.get("/api/class-student-counts", async (req, res) => {
+  try {
+    const counts = await Student.aggregate([
+      {
+        $match: {
+          status: "active"
+        }
+      },
+      {
+        $group: {
+          _id: "$academic.class",
+          studentCount: { $sum: 1 }
+        }
+      }
+    ]);
+
+    const result = {};
+
+    counts.forEach(item => {
+      if (item._id !== null && item._id !== undefined) {
+        result[String(item._id).trim()] = item.studentCount;
+      }
+    });
+
+    res.json({
+      success: true,
+      counts: result
+    });
+
+  } catch (error) {
+    console.error("Class student count error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Unable to get class student counts"
+    });
+  }
+});
 // Test route
 app.get("/", (req, res) => {
 
