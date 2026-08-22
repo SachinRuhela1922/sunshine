@@ -11,6 +11,7 @@ const ExamMarks = require("./models/ExamMarks");
 const AdmitCard = require("./models/AdmitCard");
 const Notice = require("./models/Notice");
 const TimeTable = require("./models/TimeTable");
+const Class = require("./models/Class");
 const app = express();
 
 
@@ -1904,50 +1905,42 @@ app.put("/api/students/:id", async (req, res) => {
 // ==========================================
 
 app.get("/api/students/class/:className", async (req, res) => {
-
     try {
+        const className = decodeURIComponent(req.params.className).trim();
 
-        const className = req.params.className;
-
-        const students = await Student
-            .find({
-                "academic.class": className
-            })
-            .sort({
-                "academic.section": 1,
-                rollNumber: 1
+        if (!className) {
+            return res.status(400).json({
+                success: false,
+                message: "Class name is required."
             });
+        }
 
+        const students = await Student.find({
+            "academic.class": className
+        }).sort({
+            studentName: 1
+        });
 
-        res.status(200).json({
+        console.log(
+            `CLASS: "${className}" | STUDENTS: ${students.length}`
+        );
 
+        res.json({
             success: true,
-
-            class: className,
-
+            className,
             count: students.length,
-
-            students: students
-
+            students
         });
 
     } catch (error) {
-
-        console.error("Fetch class students error:", error);
+        console.error("GET CLASS STUDENTS ERROR:", error);
 
         res.status(500).json({
-
             success: false,
-
-            message: "Unable to fetch students."
-
+            message: "Unable to fetch class students."
         });
-
     }
-
 });
-
-
 // ==========================================
 // GET SINGLE STUDENT
 // ==========================================
@@ -3482,7 +3475,10 @@ app.get("/api/student/attendance/:studentId", async (req, res) => {
 // TIME TABLE APIs
 // ===============================
 
-// GET ALL TIMETABLES
+/* =========================================================
+   GET ALL TIMETABLES
+========================================================= */
+
 app.get("/api/timetable", async (req, res) => {
     try {
 
@@ -3507,13 +3503,23 @@ app.get("/api/timetable", async (req, res) => {
 });
 
 
-// GET ONE TIMETABLE
+/* =========================================================
+   GET ONE TIMETABLE BY SEASON
+========================================================= */
+
 app.get("/api/timetable/:season", async (req, res) => {
     try {
 
         const timetable = await TimeTable.findOne({
             season: req.params.season
         });
+
+        if (!timetable) {
+            return res.status(404).json({
+                success: false,
+                message: `${req.params.season} timetable not found.`
+            });
+        }
 
         res.json({
             success: true,
@@ -3533,7 +3539,83 @@ app.get("/api/timetable/:season", async (req, res) => {
 });
 
 
-// CREATE / UPDATE TIMETABLE
+/* =========================================================
+   SHARED HELPER — NORMALIZE LECTURES
+   (matches schema field: classes -> Map of String)
+========================================================= */
+
+function normalizeLectures(lectures) {
+
+    if (!Array.isArray(lectures)) {
+        return [];
+    }
+
+    return lectures.map((lecture, index) => {
+
+        const formatted = {
+
+            type:
+                lecture.type === "lunch"
+                    ? "lunch"
+                    : "lecture",
+
+            lectureNumber:
+                lecture.type === "lunch"
+                    ? undefined
+                    : (
+                        Number(lecture.lectureNumber) ||
+                        index + 1
+                    ),
+
+            from:
+                lecture.from || "",
+
+            to:
+                lecture.to || "",
+
+            classes: {}
+        };
+
+
+        /*
+            Frontend "classes" object bhejta hai:
+            { "Class 1": "Ravi Sharma", "Class 2": "", ... }
+
+            Schema field bhi "classes" (Map of String) hai —
+            isliye seedha map karo, "classTeachers" nahi.
+        */
+
+        if (
+            lecture.classes &&
+            typeof lecture.classes === "object" &&
+            !Array.isArray(lecture.classes)
+        ) {
+
+            for (const [className, teacherName] of Object.entries(lecture.classes)) {
+
+                if (className) {
+
+                    formatted.classes[className] =
+                        teacherName || "";
+
+                }
+
+            }
+
+        }
+
+
+        return formatted;
+
+    });
+
+}
+
+
+/* =========================================================
+   CREATE / UPDATE TIMETABLE
+========================================================= */
+
 app.post("/api/timetable", async (req, res) => {
     try {
 
@@ -3545,6 +3627,9 @@ app.post("/api/timetable", async (req, res) => {
             lectures
         } = req.body;
 
+
+        /* ================= VALIDATION ================= */
+
         if (!season) {
             return res.status(400).json({
                 success: false,
@@ -3552,46 +3637,89 @@ app.post("/api/timetable", async (req, res) => {
             });
         }
 
-        const timetable = await TimeTable.findOneAndUpdate(
-            { season },
 
-            {
-                season,
-                teacherTiming: teacherTiming || "",
-                studentTiming: studentTiming || "",
-                prayerBell: prayerBell || "",
-                lectures: Array.isArray(lectures)
-                    ? lectures
-                    : []
-            },
+        if (
+            lectures !== undefined &&
+            !Array.isArray(lectures)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Lectures must be an array."
+            });
+        }
 
-            {
-                new: true,
-                upsert: true,
-                runValidators: true
-            }
-        );
+
+        /* ================= NORMALIZE LECTURES ================= */
+
+        const formattedLectures = normalizeLectures(lectures);
+
+
+        /* ================= SAVE ================= */
+
+        const timetable =
+            await TimeTable.findOneAndUpdate(
+
+                {
+                    season
+                },
+
+                {
+                    season,
+
+                    teacherTiming:
+                        teacherTiming || "",
+
+                    studentTiming:
+                        studentTiming || "",
+
+                    prayerBell:
+                        prayerBell || "",
+
+                    lectures:
+                        formattedLectures
+                },
+
+                {
+                    new: true,
+                    upsert: true,
+                    runValidators: true,
+                    setDefaultsOnInsert: true
+                }
+            );
+
 
         res.json({
             success: true,
-            message: `${season} timetable saved successfully.`,
+            message:
+                `${season} timetable saved successfully.`,
+
             timetable
         });
 
+
     } catch (error) {
 
-        console.error("Save timetable error:", error);
+        console.error(
+            "Save timetable error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
-            message: "Unable to save timetable."
+            message:
+                "Unable to save timetable.",
+            error:
+                error.message
         });
 
     }
 });
 
 
-// UPDATE TIMETABLE
+/* =========================================================
+   UPDATE TIMETABLE BY ID
+========================================================= */
+
 app.put("/api/timetable/:id", async (req, res) => {
     try {
 
@@ -3603,16 +3731,54 @@ app.put("/api/timetable/:id", async (req, res) => {
             lectures
         } = req.body;
 
+
+        /* ================= VALIDATION ================= */
+
+        if (!season) {
+            return res.status(400).json({
+                success: false,
+                message: "Season is required."
+            });
+        }
+
+
+        if (
+            lectures !== undefined &&
+            !Array.isArray(lectures)
+        ) {
+            return res.status(400).json({
+                success: false,
+                message: "Lectures must be an array."
+            });
+        }
+
+
+        /* ================= NORMALIZE LECTURES ================= */
+
+        const formattedLectures = normalizeLectures(lectures);
+
+
+        /* ================= UPDATE ================= */
+
         const timetable =
             await TimeTable.findByIdAndUpdate(
+
                 req.params.id,
 
                 {
                     season,
-                    teacherTiming,
-                    studentTiming,
-                    prayerBell,
-                    lectures
+
+                    teacherTiming:
+                        teacherTiming || "",
+
+                    studentTiming:
+                        studentTiming || "",
+
+                    prayerBell:
+                        prayerBell || "",
+
+                    lectures:
+                        formattedLectures
                 },
 
                 {
@@ -3621,33 +3787,48 @@ app.put("/api/timetable/:id", async (req, res) => {
                 }
             );
 
+
         if (!timetable) {
             return res.status(404).json({
                 success: false,
-                message: "Timetable not found."
+                message:
+                    "Timetable not found."
             });
         }
 
+
         res.json({
             success: true,
-            message: "Timetable updated successfully.",
+            message:
+                "Timetable updated successfully.",
+
             timetable
         });
 
+
     } catch (error) {
 
-        console.error("Update timetable error:", error);
+        console.error(
+            "Update timetable error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
-            message: "Unable to update timetable."
+            message:
+                "Unable to update timetable.",
+            error:
+                error.message
         });
 
     }
 });
 
 
-// DELETE TIMETABLE
+/* =========================================================
+   DELETE TIMETABLE
+========================================================= */
+
 app.delete("/api/timetable/:id", async (req, res) => {
     try {
 
@@ -3656,25 +3837,34 @@ app.delete("/api/timetable/:id", async (req, res) => {
                 req.params.id
             );
 
+
         if (!timetable) {
             return res.status(404).json({
                 success: false,
-                message: "Timetable not found."
+                message:
+                    "Timetable not found."
             });
         }
 
+
         res.json({
             success: true,
-            message: "Timetable deleted successfully."
+            message:
+                "Timetable deleted successfully."
         });
+
 
     } catch (error) {
 
-        console.error("Delete timetable error:", error);
+        console.error(
+            "Delete timetable error:",
+            error
+        );
 
         res.status(500).json({
             success: false,
-            message: "Unable to delete timetable."
+            message:
+                "Unable to delete timetable."
         });
 
     }
@@ -3783,6 +3973,78 @@ app.delete('/api/payments/:paymentId', async (req, res) => {
     }
 });
 
+
+
+function escapeRegex(string) {
+
+  return string.replace(
+    /[.*+?^${}()|[\]\\]/g,
+    "\\$&"
+  );
+
+}
+
+app.get("/api/classes", async (req, res) => {
+    try {
+        const classes = await Class.find().sort({ name: 1 });
+
+        res.json({
+            success: true,
+            classes
+        });
+
+    } catch (error) {
+        console.error("GET CLASSES ERROR:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch classes"
+        });
+    }
+});
+app.post("/api/classes", async (req, res) => {
+    try {
+        const { name } = req.body;
+
+        if (!name || !name.trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Class name is required"
+            });
+        }
+
+        const className = name.trim();
+
+        const existingClass = await Class.findOne({
+            name: className
+        });
+
+        if (existingClass) {
+            return res.status(409).json({
+                success: false,
+                message: `${className} already exists`
+            });
+        }
+
+        const newClass = await Class.create({
+            name: className
+        });
+
+        res.status(201).json({
+            success: true,
+            message: "Class created successfully",
+            class: newClass
+        });
+
+    } catch (error) {
+        console.error("CREATE CLASS ERROR:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Failed to create class"
+        });
+    }
+});
 // Test route
 app.get("/", (req, res) => {
 

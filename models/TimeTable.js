@@ -1,5 +1,32 @@
 const mongoose = require("mongoose");
 
+/* ================= CLASS TEACHER ================= */
+
+const classTeacherSchema = new mongoose.Schema(
+    {
+        className: {
+            type: String,
+            required: true
+        },
+
+        teacherId: {
+            type: String,
+            default: ""
+        },
+
+        teacherName: {
+            type: String,
+            default: ""
+        }
+    },
+    {
+        _id: false
+    }
+);
+
+
+/* ================= LECTURE ================= */
+
 const lectureSchema = new mongoose.Schema(
     {
         type: {
@@ -7,23 +34,34 @@ const lectureSchema = new mongoose.Schema(
             enum: ["lecture", "lunch"],
             default: "lecture"
         },
+
         lectureNumber: {
             type: Number,
-            required: false // Lunch break ke paas number nahi hoga
+            required: false
         },
+
         from: {
             type: String,
             required: true
         },
+
         to: {
             type: String,
             required: true
+        },
+
+        classes: {
+            type: Map,
+            of: String,
+            default: {}
         }
     },
     {
         _id: false
     }
 );
+
+/* ================= TIMETABLE ================= */
 
 const timeTableSchema = new mongoose.Schema(
     {
@@ -33,18 +71,22 @@ const timeTableSchema = new mongoose.Schema(
             required: true,
             unique: true
         },
+
         teacherTiming: {
             type: String,
             default: ""
         },
+
         studentTiming: {
             type: String,
             default: ""
         },
+
         prayerBell: {
             type: String,
             default: ""
         },
+
         lectures: {
             type: [lectureSchema],
             default: []
@@ -54,6 +96,9 @@ const timeTableSchema = new mongoose.Schema(
         timestamps: true
     }
 );
+
+
+/* ================= MODEL ================= */
 
 module.exports = mongoose.model(
     "TimeTable",
