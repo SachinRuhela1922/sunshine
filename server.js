@@ -2179,41 +2179,57 @@ app.post("/api/exam-marks", async (req, res) => {
 
 
         const formattedMarks =
-            marksArray.map(item => {
+    marksArray.map(item => {
 
-                const maxMarks =
-                    Math.max(
-                        Number(item.maxMarks) || 0,
-                        0
-                    );
+        const maxMarks =
+            Math.max(
+                Number(item.maxMarks) || 0,
+                0
+            );
 
-                const obtainedMarks =
-                    Math.max(
-                        Number(item.obtainedMarks) || 0,
-                        0
-                    );
+        const status =
+            String(item.status || "PRESENT")
+                .toUpperCase() === "ABSENT"
+                ? "ABSENT"
+                : "PRESENT";
+
+        const obtainedMarks =
+            status === "ABSENT"
+                ? 0
+                : Math.max(
+                    Number(item.obtainedMarks) || 0,
+                    0
+                );
 
 
-                totalMaxMarks += maxMarks;
-                totalObtainedMarks += obtainedMarks;
+        totalMaxMarks += maxMarks;
+
+        // ABSENT student ke 0 marks total me add honge,
+        // lekin obtained marks 0 hi rahenge.
+        totalObtainedMarks += Math.min(
+            obtainedMarks,
+            maxMarks
+        );
 
 
-                return {
+        return {
 
-                    subjectName:
-                        item.subjectName || "",
+            subjectName:
+                item.subjectName || "",
 
-                    maxMarks,
+            maxMarks,
 
-                    obtainedMarks:
-                        Math.min(
-                            obtainedMarks,
-                            maxMarks
-                        )
+            obtainedMarks:
+                Math.min(
+                    obtainedMarks,
+                    maxMarks
+                ),
 
-                };
+            status
 
-            });
+        };
+
+    });
 
 
         // ==========================================
@@ -2766,19 +2782,53 @@ app.put("/api/exam-marks/:id", async (req, res) => {
 
         const formattedMarks = marksArray.map(item => {
 
-            const maxMarks = Math.max(Number(item.maxMarks) || 0, 0);
-            const obtainedMarks = Math.max(Number(item.obtainedMarks) || 0, 0);
+    const maxMarks =
+        Math.max(
+            Number(item.maxMarks) || 0,
+            0
+        );
 
-            totalMaxMarks += maxMarks;
-            totalObtainedMarks += obtainedMarks;
+    const status =
+        String(item.status || "PRESENT")
+            .toUpperCase() === "ABSENT"
+            ? "ABSENT"
+            : "PRESENT";
 
-            return {
-                subjectName: item.subjectName || "",
-                maxMarks: maxMarks,
-                obtainedMarks: Math.min(obtainedMarks, maxMarks)
-            };
+    const obtainedMarks =
+        status === "ABSENT"
+            ? 0
+            : Math.max(
+                Number(item.obtainedMarks) || 0,
+                0
+            );
 
-        });
+
+    totalMaxMarks += maxMarks;
+
+    totalObtainedMarks += Math.min(
+        obtainedMarks,
+        maxMarks
+    );
+
+
+    return {
+
+        subjectName:
+            item.subjectName || "",
+
+        maxMarks,
+
+        obtainedMarks:
+            Math.min(
+                obtainedMarks,
+                maxMarks
+            ),
+
+        status
+
+    };
+
+});
 
         // ==========================================
         // PERCENTAGE

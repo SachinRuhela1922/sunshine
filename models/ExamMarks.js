@@ -13,9 +13,15 @@ const subjectMarksSchema = new mongoose.Schema(
         },
 
         obtainedMarks: {
-            type: Number,
-            default: 0
-        }
+    type: Number,
+    default: 0
+},
+
+status: {
+    type: String,
+    enum: ["PRESENT", "ABSENT"],
+    default: "PRESENT"
+}
     },
     {
         _id: false
