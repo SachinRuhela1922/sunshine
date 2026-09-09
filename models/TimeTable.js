@@ -1,20 +1,21 @@
 const mongoose = require("mongoose");
 
-/* ================= CLASS TEACHER ================= */
 
-const classTeacherSchema = new mongoose.Schema(
+/* ================= CLASS TIMETABLE ================= */
+
+const classTimetableSchema = new mongoose.Schema(
     {
-        className: {
-            type: String,
-            required: true
-        },
-
         teacherId: {
             type: String,
             default: ""
         },
 
         teacherName: {
+            type: String,
+            default: ""
+        },
+
+        subject: {
             type: String,
             default: ""
         }
@@ -52,7 +53,7 @@ const lectureSchema = new mongoose.Schema(
 
         classes: {
             type: Map,
-            of: String,
+            of: classTimetableSchema,
             default: {}
         }
     },
@@ -60,6 +61,7 @@ const lectureSchema = new mongoose.Schema(
         _id: false
     }
 );
+
 
 /* ================= TIMETABLE ================= */
 

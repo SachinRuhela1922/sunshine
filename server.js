@@ -3528,11 +3528,15 @@ app.get("/api/student/attendance/:studentId", async (req, res) => {
 /* =========================================================
    GET ALL TIMETABLES
 ========================================================= */
+/* =========================================================
+   GET ALL TIMETABLES
+========================================================= */
 
 app.get("/api/timetable", async (req, res) => {
     try {
 
-        const timetables = await TimeTable.find()
+        const timetables = await TimeTable
+            .find()
             .sort({ season: 1 });
 
         res.json({
@@ -3548,13 +3552,12 @@ app.get("/api/timetable", async (req, res) => {
             success: false,
             message: "Unable to fetch timetable."
         });
-
     }
 });
 
 
 /* =========================================================
-   GET ONE TIMETABLE BY SEASON
+   GET TIMETABLE BY SEASON
 ========================================================= */
 
 app.get("/api/timetable/:season", async (req, res) => {
@@ -3584,14 +3587,12 @@ app.get("/api/timetable/:season", async (req, res) => {
             success: false,
             message: "Unable to fetch timetable."
         });
-
     }
 });
 
 
 /* =========================================================
-   SHARED HELPER — NORMALIZE LECTURES
-   (matches schema field: classes -> Map of String)
+   NORMALIZE LECTURES
 ========================================================= */
 
 function normalizeLectures(lectures) {
@@ -3617,56 +3618,106 @@ function normalizeLectures(lectures) {
                         index + 1
                     ),
 
-            from:
-                lecture.from || "",
+            from: lecture.from || "",
 
-            to:
-                lecture.to || "",
+            to: lecture.to || "",
 
             classes: {}
         };
 
 
-        /*
-            Frontend "classes" object bhejta hai:
-            { "Class 1": "Ravi Sharma", "Class 2": "", ... }
+        /* =========================================
+           LUNCH
+        ========================================= */
 
-            Schema field bhi "classes" (Map of String) hai —
-            isliye seedha map karo, "classTeachers" nahi.
-        */
-
-        if (
-            lecture.classes &&
-            typeof lecture.classes === "object" &&
-            !Array.isArray(lecture.classes)
-        ) {
-
-            for (const [className, teacherName] of Object.entries(lecture.classes)) {
-
-                if (className) {
-
-                    formatted.classes[className] =
-                        teacherName || "";
-
-                }
-
-            }
-
+        if (lecture.type === "lunch") {
+            formatted.classes = {};
+            return formatted;
         }
 
 
+        /* =========================================
+           CLASSES
+        ========================================= */
+
+        if (
+            lecture.classes &&
+            typeof lecture.classes === "object"
+        ) {
+
+            for (
+                const [className, classData]
+                of Object.entries(lecture.classes)
+            ) {
+
+                if (!className) continue;
+
+
+                /* =====================================
+                   NEW FORMAT
+
+                   Class 1: {
+                       teacherId,
+                       teacherName,
+                       subject
+                   }
+                ===================================== */
+
+                if (
+                    classData &&
+                    typeof classData === "object" &&
+                    !Array.isArray(classData)
+                ) {
+
+                    formatted.classes[className] = {
+
+                        teacherId:
+                            classData.teacherId || "",
+
+                        teacherName:
+                            classData.teacherName || "",
+
+                        subject:
+                            classData.subject || ""
+                    };
+
+                }
+
+
+                /* =====================================
+                   OLD FORMAT
+
+                   Class 1: "Rahul Sir"
+
+                   Convert old data automatically
+                ===================================== */
+
+                else {
+
+                    formatted.classes[className] = {
+
+                        teacherId: "",
+
+                        teacherName:
+                            classData || "",
+
+                        subject: ""
+                    };
+                }
+            }
+        }
+
         return formatted;
-
     });
-
 }
 
 
 /* =========================================================
-   CREATE / UPDATE TIMETABLE
+   CREATE / SAVE TIMETABLE
 ========================================================= */
 
 app.post("/api/timetable", async (req, res) => {
+
     try {
 
         const {
@@ -3678,9 +3729,12 @@ app.post("/api/timetable", async (req, res) => {
         } = req.body;
 
 
-        /* ================= VALIDATION ================= */
+        /* =========================================
+           VALIDATION
+        ========================================= */
 
         if (!season) {
+
             return res.status(400).json({
                 success: false,
                 message: "Season is required."
@@ -3692,6 +3746,7 @@ app.post("/api/timetable", async (req, res) => {
             lectures !== undefined &&
             !Array.isArray(lectures)
         ) {
+
             return res.status(400).json({
                 success: false,
                 message: "Lectures must be an array."
@@ -3699,12 +3754,17 @@ app.post("/api/timetable", async (req, res) => {
         }
 
 
-        /* ================= NORMALIZE LECTURES ================= */
+        /* =========================================
+           FORMAT LECTURES
+        ========================================= */
 
-        const formattedLectures = normalizeLectures(lectures);
+        const formattedLectures =
+            normalizeLectures(lectures);
 
 
-        /* ================= SAVE ================= */
+        /* =========================================
+           SAVE / UPSERT
+        ========================================= */
 
         const timetable =
             await TimeTable.findOneAndUpdate(
@@ -3731,15 +3791,20 @@ app.post("/api/timetable", async (req, res) => {
 
                 {
                     new: true,
+
                     upsert: true,
+
                     runValidators: true,
+
                     setDefaultsOnInsert: true
                 }
             );
 
 
         res.json({
+
             success: true,
+
             message:
                 `${season} timetable saved successfully.`,
 
@@ -3755,13 +3820,15 @@ app.post("/api/timetable", async (req, res) => {
         );
 
         res.status(500).json({
+
             success: false,
+
             message:
                 "Unable to save timetable.",
+
             error:
                 error.message
         });
-
     }
 });
 
@@ -3771,6 +3838,7 @@ app.post("/api/timetable", async (req, res) => {
 ========================================================= */
 
 app.put("/api/timetable/:id", async (req, res) => {
+
     try {
 
         const {
@@ -3782,12 +3850,18 @@ app.put("/api/timetable/:id", async (req, res) => {
         } = req.body;
 
 
-        /* ================= VALIDATION ================= */
+        /* =========================================
+           VALIDATION
+        ========================================= */
 
         if (!season) {
+
             return res.status(400).json({
+
                 success: false,
-                message: "Season is required."
+
+                message:
+                    "Season is required."
             });
         }
 
@@ -3796,19 +3870,28 @@ app.put("/api/timetable/:id", async (req, res) => {
             lectures !== undefined &&
             !Array.isArray(lectures)
         ) {
+
             return res.status(400).json({
+
                 success: false,
-                message: "Lectures must be an array."
+
+                message:
+                    "Lectures must be an array."
             });
         }
 
 
-        /* ================= NORMALIZE LECTURES ================= */
+        /* =========================================
+           FORMAT LECTURES
+        ========================================= */
 
-        const formattedLectures = normalizeLectures(lectures);
+        const formattedLectures =
+            normalizeLectures(lectures);
 
 
-        /* ================= UPDATE ================= */
+        /* =========================================
+           UPDATE
+        ========================================= */
 
         const timetable =
             await TimeTable.findByIdAndUpdate(
@@ -3816,6 +3899,7 @@ app.put("/api/timetable/:id", async (req, res) => {
                 req.params.id,
 
                 {
+
                     season,
 
                     teacherTiming:
@@ -3833,14 +3917,18 @@ app.put("/api/timetable/:id", async (req, res) => {
 
                 {
                     new: true,
+
                     runValidators: true
                 }
             );
 
 
         if (!timetable) {
+
             return res.status(404).json({
+
                 success: false,
+
                 message:
                     "Timetable not found."
             });
@@ -3848,7 +3936,9 @@ app.put("/api/timetable/:id", async (req, res) => {
 
 
         res.json({
+
             success: true,
+
             message:
                 "Timetable updated successfully.",
 
@@ -3864,13 +3954,15 @@ app.put("/api/timetable/:id", async (req, res) => {
         );
 
         res.status(500).json({
+
             success: false,
+
             message:
                 "Unable to update timetable.",
+
             error:
                 error.message
         });
-
     }
 });
 
@@ -3880,6 +3972,7 @@ app.put("/api/timetable/:id", async (req, res) => {
 ========================================================= */
 
 app.delete("/api/timetable/:id", async (req, res) => {
+
     try {
 
         const timetable =
@@ -3889,8 +3982,11 @@ app.delete("/api/timetable/:id", async (req, res) => {
 
 
         if (!timetable) {
+
             return res.status(404).json({
+
                 success: false,
+
                 message:
                     "Timetable not found."
             });
@@ -3898,7 +3994,9 @@ app.delete("/api/timetable/:id", async (req, res) => {
 
 
         res.json({
+
             success: true,
+
             message:
                 "Timetable deleted successfully."
         });
@@ -3912,11 +4010,12 @@ app.delete("/api/timetable/:id", async (req, res) => {
         );
 
         res.status(500).json({
+
             success: false,
+
             message:
                 "Unable to delete timetable."
         });
-
     }
 });
 
