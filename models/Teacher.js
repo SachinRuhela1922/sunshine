@@ -20,6 +20,16 @@ const teacherSchema = new mongoose.Schema(
             trim: true
         },
 
+        fatherName: {
+            type: String,
+            trim: true
+        },
+
+        motherName: {
+            type: String,
+            trim: true
+        },
+
         email: {
             type: String,
             unique: true,
@@ -120,7 +130,6 @@ const teacherSchema = new mongoose.Schema(
             profilePhoto: String
         }
     },
-
     {
         timestamps: true
     }

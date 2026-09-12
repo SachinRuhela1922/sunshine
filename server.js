@@ -517,6 +517,8 @@ app.put("/api/teachers/:id", async (req, res) => {
         const {
             employeeId,
             name,
+            fatherName,
+            motherName,
             email,
             phone,
             gender,
@@ -530,11 +532,12 @@ app.put("/api/teachers/:id", async (req, res) => {
         } = req.body;
 
 
-        // Find teacher
+        // ==========================================
+        // FIND TEACHER
+        // ==========================================
+
         const teacher =
-            await Teacher.findById(
-                teacherId
-            );
+            await Teacher.findById(teacherId);
 
 
         if (!teacher) {
@@ -563,6 +566,7 @@ app.put("/api/teachers/:id", async (req, res) => {
 
             const existingEmail =
                 await Teacher.findOne({
+
                     email:
                         email.toLowerCase(),
 
@@ -570,6 +574,7 @@ app.put("/api/teachers/:id", async (req, res) => {
                         $ne:
                             teacherId
                     }
+
                 });
 
 
@@ -603,7 +608,6 @@ app.put("/api/teachers/:id", async (req, res) => {
                 await Teacher.findOne({
 
                     employeeId:
-
                         employeeId,
 
                     _id: {
@@ -638,33 +642,53 @@ app.put("/api/teachers/:id", async (req, res) => {
             teacher.employeeId =
                 employeeId;
 
+
         if (name !== undefined)
             teacher.name =
                 name;
+
+
+        // NEW
+        if (fatherName !== undefined)
+            teacher.fatherName =
+                fatherName;
+
+
+        // NEW
+        if (motherName !== undefined)
+            teacher.motherName =
+                motherName;
+
 
         if (email !== undefined)
             teacher.email =
                 email.toLowerCase();
 
+
         if (phone !== undefined)
             teacher.phone =
                 phone;
+
 
         if (gender !== undefined)
             teacher.gender =
                 gender;
 
+
         if (qualification !== undefined)
             teacher.qualification =
                 qualification;
+
 
         if (joiningDate !== undefined)
             teacher.joiningDate =
                 joiningDate;
 
+
         if (role !== undefined)
             teacher.role =
                 role;
+
 
         if (status !== undefined)
             teacher.status =
@@ -734,6 +758,7 @@ app.put("/api/teachers/:id", async (req, res) => {
                 "Teacher details updated successfully.",
 
             teacher: {
+
                 teacherId:
                     teacher.teacherId,
 
@@ -742,6 +767,12 @@ app.put("/api/teachers/:id", async (req, res) => {
 
                 name:
                     teacher.name,
+
+                fatherName:
+                    teacher.fatherName,
+
+                motherName:
+                    teacher.motherName,
 
                 email:
                     teacher.email,
@@ -772,6 +803,7 @@ app.put("/api/teachers/:id", async (req, res) => {
 
                 profile:
                     teacher.profile
+
             }
 
         });
@@ -800,7 +832,6 @@ app.put("/api/teachers/:id", async (req, res) => {
     }
 
 });
-
 // ==========================================
 // GET SINGLE TEACHER
 // ==========================================
@@ -2048,20 +2079,22 @@ app.post("/api/teachers/login", async (req, res) => {
 
         // Password frontend ko kabhi mat bhejna
         const teacherData = {
-            teacherId: loggedInTeacher.teacherId,
-            employeeId: loggedInTeacher.employeeId,
-            name: loggedInTeacher.name,
-            email: loggedInTeacher.email,
-            phone: loggedInTeacher.phone,
-            role: loggedInTeacher.role,
-            gender: loggedInTeacher.gender,
-            qualification: loggedInTeacher.qualification,
-            joiningDate: loggedInTeacher.joiningDate,
-            status: loggedInTeacher.status,
-            assignedClasses: loggedInTeacher.assignedClasses,
-            permissions: loggedInTeacher.permissions,
-            profile: loggedInTeacher.profile
-        };
+    teacherId: loggedInTeacher.teacherId,
+    employeeId: loggedInTeacher.employeeId,
+    name: loggedInTeacher.name,
+    fatherName: loggedInTeacher.fatherName,
+    motherName: loggedInTeacher.motherName,
+    email: loggedInTeacher.email,
+    phone: loggedInTeacher.phone,
+    role: loggedInTeacher.role,
+    gender: loggedInTeacher.gender,
+    qualification: loggedInTeacher.qualification,
+    joiningDate: loggedInTeacher.joiningDate,
+    status: loggedInTeacher.status,
+    assignedClasses: loggedInTeacher.assignedClasses,
+    permissions: loggedInTeacher.permissions,
+    profile: loggedInTeacher.profile
+};
 
 
         res.status(200).json({
@@ -2892,12 +2925,15 @@ app.put("/api/exam-marks/:id", async (req, res) => {
 
 
 // Add Teacher
+// Add Teacher
 app.post("/api/teachers", async (req, res) => {
 
     try {
 
         const {
             name,
+            fatherName,
+            motherName,
             employeeId,
             email,
             phone,
@@ -2985,6 +3021,10 @@ app.post("/api/teachers", async (req, res) => {
 
             name,
 
+            fatherName: fatherName || "",
+
+            motherName: motherName || "",
+
             email: email.toLowerCase(),
 
             phone,
@@ -3031,6 +3071,8 @@ app.post("/api/teachers", async (req, res) => {
                 teacherId: teacher.teacherId,
                 employeeId: teacher.employeeId,
                 name: teacher.name,
+                fatherName: teacher.fatherName,
+                motherName: teacher.motherName,
                 email: teacher.email,
                 role: teacher.role,
                 assignedClasses: teacher.assignedClasses
