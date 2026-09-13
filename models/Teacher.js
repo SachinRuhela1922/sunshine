@@ -24,6 +24,10 @@ const teacherSchema = new mongoose.Schema(
             type: String,
             trim: true
         },
+        department: {
+            type: String,
+            trim: true
+        },
 
         motherName: {
             type: String,

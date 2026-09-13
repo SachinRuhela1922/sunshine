@@ -518,6 +518,7 @@ app.put("/api/teachers/:id", async (req, res) => {
             employeeId,
             name,
             fatherName,
+            department,
             motherName,
             email,
             phone,
@@ -652,6 +653,13 @@ app.put("/api/teachers/:id", async (req, res) => {
         if (fatherName !== undefined)
             teacher.fatherName =
                 fatherName;
+        
+
+
+        // NEW
+        if (department !== undefined)
+            teacher.department =
+                department;
 
 
         // NEW
@@ -770,6 +778,8 @@ app.put("/api/teachers/:id", async (req, res) => {
 
                 fatherName:
                     teacher.fatherName,
+                department:
+                    teacher.department,
 
                 motherName:
                     teacher.motherName,
@@ -2083,6 +2093,7 @@ app.post("/api/teachers/login", async (req, res) => {
     employeeId: loggedInTeacher.employeeId,
     name: loggedInTeacher.name,
     fatherName: loggedInTeacher.fatherName,
+    department: loggedInTeacher.department,
     motherName: loggedInTeacher.motherName,
     email: loggedInTeacher.email,
     phone: loggedInTeacher.phone,
@@ -2933,6 +2944,7 @@ app.post("/api/teachers", async (req, res) => {
         const {
             name,
             fatherName,
+            department,
             motherName,
             employeeId,
             email,
@@ -3022,7 +3034,7 @@ app.post("/api/teachers", async (req, res) => {
             name,
 
             fatherName: fatherName || "",
-
+            department: department || "",
             motherName: motherName || "",
 
             email: email.toLowerCase(),
@@ -3072,6 +3084,7 @@ app.post("/api/teachers", async (req, res) => {
                 employeeId: teacher.employeeId,
                 name: teacher.name,
                 fatherName: teacher.fatherName,
+                department: teacher.department,
                 motherName: teacher.motherName,
                 email: teacher.email,
                 role: teacher.role,
