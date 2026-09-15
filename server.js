@@ -11,6 +11,7 @@ const ExamMarks = require("./models/ExamMarks");
 const AdmitCard = require("./models/AdmitCard");
 const Notice = require("./models/Notice");
 const TimeTable = require("./models/TimeTable");
+const TeacherAttendance = require("./models/TeacherAttendance");
 const Class = require("./models/Class");
 const app = express();
 
@@ -4291,6 +4292,178 @@ app.get("/api/class-student-counts", async (req, res) => {
     });
   }
 });
+
+
+
+/* =============================================================
+   TEACHER ATTENDANCE — ADD THESE TO server.js
+   =============================================================
+
+   STEP 1: Top of server.js, saath me baaki model requires ke,
+   ye line add kar:
+
+       const TeacherAttendance = require("./models/TeacherAttendance");
+
+   STEP 2: Neeche ke saare routes kahin bhi (student/attendance
+   routes ke paas) paste kar de, jaise "app.listen" se upar.
+============================================================= */
+
+
+// ==========================================
+// SAVE / UPDATE TEACHER ATTENDANCE (for a date)
+// ==========================================
+
+app.post("/api/teacher-attendance", async (req, res) => {
+
+    try {
+
+        const { date, teachers } = req.body;
+
+        if (!date || !teachers || !Array.isArray(teachers)) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Date and teacher attendance list are required."
+            });
+
+        }
+
+        // Date ko day ke start par normalize karo (jaise student attendance me hota hai)
+        const attendanceDate = new Date(date);
+        attendanceDate.setHours(0, 0, 0, 0);
+
+        // Har teacher entry basic validate kar lo
+        const cleanedTeachers = teachers.map((t) => ({
+            teacher: t.teacher,
+            teacherId: t.teacherId || "",
+            employeeId: t.employeeId || "",
+            name: t.name || "",
+            department: t.department || "",
+            status: t.status || "Present",
+            inTime: t.inTime || "",
+            outTime: t.outTime || ""
+        }));
+
+        const existing = await TeacherAttendance.findOne({
+            date: attendanceDate
+        });
+
+        if (existing) {
+
+            existing.teachers = cleanedTeachers;
+            await existing.save();
+
+            return res.status(200).json({
+                success: true,
+                message: "Teacher attendance updated successfully.",
+                attendance: existing
+            });
+
+        }
+
+        const attendance = await TeacherAttendance.create({
+            date: attendanceDate,
+            teachers: cleanedTeachers
+        });
+
+        res.status(201).json({
+            success: true,
+            message: "Teacher attendance saved successfully.",
+            attendance
+        });
+
+    } catch (error) {
+
+        console.error("Save teacher attendance error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to save teacher attendance."
+        });
+
+    }
+
+});
+
+
+// ==========================================
+// GET TEACHER ATTENDANCE BY DATE
+// ==========================================
+
+app.get("/api/teacher-attendance/:date", async (req, res) => {
+
+    try {
+
+        const { date } = req.params;
+
+        const attendanceDate = new Date(date);
+        attendanceDate.setHours(0, 0, 0, 0);
+
+        const attendance = await TeacherAttendance.findOne({
+            date: attendanceDate
+        });
+
+        if (!attendance) {
+
+            return res.status(404).json({
+                success: false,
+                message: "Attendance not found for this date."
+            });
+
+        }
+
+        res.status(200).json({
+            success: true,
+            attendance
+        });
+
+    } catch (error) {
+
+        console.error("Fetch teacher attendance error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch teacher attendance."
+        });
+
+    }
+
+});
+
+
+// ==========================================
+// (OPTIONAL) GET ALL TEACHER ATTENDANCE RECORDS
+// Useful for a history / report page later
+// ==========================================
+
+app.get("/api/teacher-attendance", async (req, res) => {
+
+    try {
+
+        const records = await TeacherAttendance
+            .find()
+            .sort({ date: -1 });
+
+        res.status(200).json({
+            success: true,
+            count: records.length,
+            records
+        });
+
+    } catch (error) {
+
+        console.error("Fetch all teacher attendance error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch teacher attendance records."
+        });
+
+    }
+
+});
+
+
 // Test route
 app.get("/", (req, res) => {
 
