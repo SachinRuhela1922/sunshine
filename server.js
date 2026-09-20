@@ -4464,6 +4464,89 @@ app.get("/api/teacher-attendance", async (req, res) => {
 });
 
 
+// EDIT CLASS NAME
+app.put("/api/classes/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name } = req.body;
+
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Class name is required"
+      });
+    }
+
+    const newName = name.trim();
+
+    // Find class
+    const classData = await Class.findById(id);
+
+    if (!classData) {
+      return res.status(404).json({
+        success: false,
+        message: "Class not found"
+      });
+    }
+
+    const oldName = classData.name;
+
+    // Check duplicate class name
+    const existingClass = await Class.findOne({
+      name: newName,
+      _id: { $ne: id }
+    });
+
+    if (existingClass) {
+      return res.status(409).json({
+        success: false,
+        message: "A class with this name already exists"
+      });
+    }
+
+    // Update class name
+    classData.name = newName;
+
+    await classData.save();
+
+    /*
+     * IMPORTANT:
+     * If students store class name as a string,
+     * update those students too.
+     *
+     * Remove this section if your students reference
+     * the class using class ID instead.
+     */
+
+    await Student.updateMany(
+      { "academic.class": oldName },
+      {
+        $set: {
+          "academic.class": newName
+        }
+      }
+    );
+
+    res.json({
+      success: true,
+      message: "Class updated successfully",
+      oldName,
+      newName,
+      class: classData
+    });
+
+  } catch (error) {
+    console.error("Edit class error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Unable to update class",
+      error: error.message
+    });
+  }
+});
+
+
 // Test route
 app.get("/", (req, res) => {
 
