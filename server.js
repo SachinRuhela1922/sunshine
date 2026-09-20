@@ -3108,6 +3108,20 @@ app.post("/api/teachers", async (req, res) => {
 });
 
 
+// "14:30" -> "02:30 PM"
+function formatTime12h(time) {
+    if (!time || !/^\d{2}:\d{2}$/.test(time)) return time || "";
+    let [h, m] = time.split(":").map(Number);
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")} ${ampm}`;
+}
+
+function formatTimeRange(subject) {
+    if (!subject.startTime || !subject.endTime) return "";
+    return `${formatTime12h(subject.startTime)} - ${formatTime12h(subject.endTime)}`;
+}
+
 app.get("/api/admitcard/download", async (req, res) => {
     try {
         const { exam, className } = req.query;
@@ -3158,7 +3172,8 @@ app.get("/api/admitcard/download", async (req, res) => {
             "Exam",
             "Subject",
             "Exam Date",
-            "Exam Day"
+            "Exam Day",
+            "Exam Time"
         ].join(",") + "\n";
 
         students.forEach(student => {
@@ -3181,7 +3196,8 @@ app.get("/api/admitcard/download", async (req, res) => {
                     exam,
                     subject.subject || "",
                     subject.date || "",
-                    subject.day || ""
+                    subject.day || "",
+                    formatTimeRange(subject)
                 ];
 
                 csv += row
@@ -3224,7 +3240,41 @@ app.post("/api/admitcard", async (req, res) => {
             });
         }
 
-        const AdmitCard = require("./models/AdmitCard");
+        const timeRegex = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+        for (let i = 0; i < subjects.length; i++) {
+            const sub = subjects[i];
+            const label = sub.subject || `Row ${i + 1}`;
+
+            if (!sub.subject || !sub.date || !sub.day) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Subject, date and day are required (${label})`
+                });
+            }
+
+            if (!timeRegex.test(sub.startTime || "") || !timeRegex.test(sub.endTime || "")) {
+                return res.status(400).json({
+                    success: false,
+                    message: `Valid start time and end time are required (${label})`
+                });
+            }
+
+            if (sub.endTime <= sub.startTime) {
+                return res.status(400).json({
+                    success: false,
+                    message: `End time must be after start time (${label})`
+                });
+            }
+        }
+
+        const cleanSubjects = subjects.map(sub => ({
+            subject: String(sub.subject).trim(),
+            date: sub.date,
+            day: sub.day,
+            startTime: sub.startTime,
+            endTime: sub.endTime
+        }));
 
         const admitCard = await AdmitCard.findOneAndUpdate(
             {
@@ -3234,7 +3284,7 @@ app.post("/api/admitcard", async (req, res) => {
             {
                 exam: exam,
                 className: className,
-                subjects: subjects
+                subjects: cleanSubjects
             },
             {
                 new: true,
