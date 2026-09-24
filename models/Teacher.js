@@ -130,6 +130,10 @@ const teacherSchema = new mongoose.Schema(
 
         profile: {
             address: String,
+            city: String,
+            state: String,
+            dob: Date,
+            emergencyContact: String,
             bloodGroup: String,
             profilePhoto: String
         }

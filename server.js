@@ -741,8 +741,23 @@ app.put("/api/teachers/:id", async (req, res) => {
             typeof profile === "object"
         ) {
 
-            teacher.profile =
-                profile;
+            // Merge instead of blind overwrite, so fields
+            // that already existed but weren't sent this
+            // time don't get wiped out.
+            teacher.profile = {
+                ...(teacher.profile
+                    ? (teacher.profile.toObject
+                        ? teacher.profile.toObject()
+                        : teacher.profile)
+                    : {}),
+                ...profile
+            };
+
+            // IMPORTANT: Mongoose sometimes doesn't detect
+            // changes to Mixed-type / nested fields reliably,
+            // especially when the path was previously empty
+            // or undefined. This forces it to be saved.
+            teacher.markModified("profile");
 
         }
 
