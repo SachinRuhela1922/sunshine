@@ -1,7 +1,6 @@
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const bcrypt = require("bcryptjs");
 const Student = require("./models/Student");
 const Teacher = require("./models/Teacher");
 const Payment = require("./models/Payment");
@@ -459,8 +458,7 @@ app.get("/api/teachers/:id", async (req, res) => {
     try {
 
         const teacher = await Teacher
-            .findById(req.params.id)
-            .select("-password");
+            .findById(req.params.id);
 
 
         if (!teacher) {
@@ -853,8 +851,7 @@ app.get("/api/teachers/:id", async (req, res) => {
     try {
 
         const teacher = await Teacher
-            .findById(req.params.id)
-            .select("-password");
+            .findById(req.params.id);
 
 
         if (!teacher) {
@@ -1746,9 +1743,7 @@ app.get("/api/teachers/:id", async (req, res) => {
 
 // ==========================================
 // RESET TEACHER PASSWORD
-// (Admin sets a new password. We NEVER read
-// back or display the old password — bcrypt
-// hashes cannot be reversed to plaintext.)
+// (Plaintext — admin can view/reset from the profile page.)
 // ==========================================
 
 app.put("/api/teachers/:id/reset-password", async (req, res) => {
@@ -1777,9 +1772,7 @@ app.put("/api/teachers/:id/reset-password", async (req, res) => {
 
         }
 
-        const hashedPassword = await bcrypt.hash(newPassword.trim(), 10);
-
-        teacher.password = hashedPassword;
+        teacher.password = newPassword.trim();
 
         await teacher.save();
 
@@ -2054,30 +2047,11 @@ app.post("/api/teachers/login", async (req, res) => {
         }
 
 
-        // Saare active teachers find karo
-        const teachers = await Teacher.find({
-            status: "active"
+        // Plaintext password match — active teacher dhundo
+        const loggedInTeacher = await Teacher.findOne({
+            status: "active",
+            password: password
         });
-
-
-        let loggedInTeacher = null;
-
-
-        // Password ko bcrypt se verify karo
-        for (const teacher of teachers) {
-
-            const isMatch = await bcrypt.compare(
-                password,
-                teacher.password
-            );
-
-
-            if (isMatch) {
-
-                loggedInTeacher = teacher;
-                break;
-            }
-        }
 
 
         if (!loggedInTeacher) {
@@ -3022,10 +2996,6 @@ app.post("/api/teachers", async (req, res) => {
             "TCH" + String(teacherNumber).padStart(3, "0");
 
 
-        // Hash password
-        const hashedPassword = await bcrypt.hash(password, 10);
-
-
         // Create teacher
         const teacher = new Teacher({
 
@@ -3043,7 +3013,7 @@ app.post("/api/teachers", async (req, res) => {
 
             phone,
 
-            password: hashedPassword,
+            password,
 
             role: "teacher",
 
