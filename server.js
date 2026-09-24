@@ -13,6 +13,7 @@ const Notice = require("./models/Notice");
 const TimeTable = require("./models/TimeTable");
 const TeacherAttendance = require("./models/TeacherAttendance");
 const Class = require("./models/Class");
+const Syllabus = require("./models/Syllabus");
 const app = express();
 
 
@@ -4594,6 +4595,176 @@ app.put("/api/classes/:id", async (req, res) => {
       error: error.message
     });
   }
+});
+
+
+/* =============================================================
+   SYLLABUS ROUTES
+   =============================================================
+   Har class ka apna alag syllabus document hota hai (className
+   se unique). Fixed terms: unit1, unit2, halfYearly, unit3,
+   unit4, annual. Har term ke andar subject rows hote hain
+   (subject, chapterFrom, chapterTo, extra note).
+============================================================= */
+
+
+// ==========================================
+// CREATE / UPDATE (UPSERT) SYLLABUS FOR A CLASS
+// Admin class.html se poora syllabus form save karega
+// ==========================================
+
+app.post("/api/syllabus", async (req, res) => {
+
+    try {
+
+        const { className, terms } = req.body;
+
+        if (!className || !className.trim()) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Class name is required."
+            });
+
+        }
+
+        const cleanClassName = className.trim();
+
+        // Fixed term keys - kisi aur key ko ignore kar do
+        const termKeys = [
+            "unit1",
+            "unit2",
+            "halfYearly",
+            "unit3",
+            "unit4",
+            "annual"
+        ];
+
+        const cleanedTerms = {};
+
+        termKeys.forEach((key) => {
+
+            const rows = (terms && Array.isArray(terms[key])) ? terms[key] : [];
+
+            cleanedTerms[key] = rows
+                .filter((row) => row && row.subject && row.subject.trim())
+                .map((row) => ({
+                    subject: row.subject.trim(),
+                    chapterFrom: (row.chapterFrom || "").toString().trim(),
+                    chapterTo: (row.chapterTo || "").toString().trim(),
+                    extra: (row.extra || "").toString().trim()
+                }));
+
+        });
+
+        const updatedSyllabus = await Syllabus.findOneAndUpdate(
+            { className: cleanClassName },
+            {
+                className: cleanClassName,
+                terms: cleanedTerms
+            },
+            {
+                new: true,
+                upsert: true,
+                setDefaultsOnInsert: true
+            }
+        );
+
+        res.status(200).json({
+            success: true,
+            message: "Syllabus saved successfully.",
+            syllabus: updatedSyllabus
+        });
+
+    } catch (error) {
+
+        console.error("Save syllabus error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to save syllabus."
+        });
+
+    }
+
+});
+
+
+// ==========================================
+// GET SYLLABUS FOR ONE CLASS
+// class.html (create/view) + teacher.html (assigned class) dono
+// isi route ko use karenge
+// ==========================================
+
+app.get("/api/syllabus/:className", async (req, res) => {
+
+    try {
+
+        const { className } = req.params;
+
+        const syllabus = await Syllabus.findOne({
+            className: className
+        });
+
+        if (!syllabus) {
+
+            return res.status(404).json({
+                success: false,
+                message: "No syllabus found for this class.",
+                syllabus: null
+            });
+
+        }
+
+        res.status(200).json({
+            success: true,
+            syllabus
+        });
+
+    } catch (error) {
+
+        console.error("Fetch syllabus error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch syllabus."
+        });
+
+    }
+
+});
+
+
+// ==========================================
+// GET ALL CLASSES' SYLLABUS TOGETHER
+// view-syllabus.html isse ek sath sabhi class ka syllabus dikhayega
+// ==========================================
+
+app.get("/api/syllabus", async (req, res) => {
+
+    try {
+
+        const syllabusList = await Syllabus
+            .find()
+            .sort({ className: 1 });
+
+        res.status(200).json({
+            success: true,
+            count: syllabusList.length,
+            syllabus: syllabusList
+        });
+
+    } catch (error) {
+
+        console.error("Fetch all syllabus error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to fetch syllabus list."
+        });
+
+    }
+
 });
 
 
