@@ -34,6 +34,11 @@ const teacherSchema = new mongoose.Schema(
             trim: true
         },
 
+        husbandName: {
+            type: String,
+            trim: true
+        },
+
         email: {
             type: String,
             unique: true,
