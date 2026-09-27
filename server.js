@@ -1412,20 +1412,84 @@ app.delete("/api/extra-classes/:id", async (req, res) => {
 // is ever silently dropped)
 // ==========================================
  
+// Fixed term keys used everywhere marks are stored (same as Syllabus)
+const MARK_TERM_KEYS = [
+    "unit1",
+    "unit2",
+    "halfYearly",
+    "unit3",
+    "unit4",
+    "annual"
+];
+
+// Cleans one term's array of {subject, maxMarks, obtainedMarks} rows.
+function cleanMarkRows(rows) {
+    if (!Array.isArray(rows)) return [];
+
+    return rows
+        .filter((row) => row && row.subject && row.subject.toString().trim())
+        .map((row) => ({
+            subject: row.subject.toString().trim(),
+            maxMarks: Number(row.maxMarks) || 0,
+            obtainedMarks: Number(row.obtainedMarks) || 0
+        }));
+}
+
+// Builds the full "marks" object ({unit1: [...], unit2: [...], ...}) from
+// whatever the front-end sent, and keeps every term in sync: if a subject
+// appears in ANY term but is missing from another term, it is added there
+// too (with 0/0) so every term always shows the same subject list.
+function buildMarksPayload(rawMarks) {
+    const marks = {};
+    const allSubjects = [];
+
+    MARK_TERM_KEYS.forEach((key) => {
+        const rows = cleanMarkRows(rawMarks && rawMarks[key]);
+        marks[key] = rows;
+
+        rows.forEach((row) => {
+            if (!allSubjects.includes(row.subject)) {
+                allSubjects.push(row.subject);
+            }
+        });
+    });
+
+    MARK_TERM_KEYS.forEach((key) => {
+        const existingSubjects = marks[key].map((row) => row.subject);
+
+        allSubjects.forEach((subject) => {
+            if (!existingSubjects.includes(subject)) {
+                marks[key].push({
+                    subject,
+                    maxMarks: 0,
+                    obtainedMarks: 0
+                });
+            }
+        });
+    });
+
+    return marks;
+}
+
 function buildStudentPayload(body) {
     return {
         name: body.name || "",
         fatherName: body.fatherName || "",
         motherName: body.motherName || "",
+        fatherOccupation: body.fatherOccupation || "",
         phone: body.phone || "",
         alternatePhone: body.alternatePhone || "",
  
         rollNumber: body.rollNumber || "",
+        srNumber: body.srNumber || "",
         admissionNumber: body.admissionNumber || "",
  
         penNumber: body.penNumber || "",
         aadharNumber: body.aadharNumber || "",
         email: (body.email || "").trim().toLowerCase(),
+ 
+        caste: body.caste || "",
+        category: body.category || "",
  
         dob: body.dob || "",
         gender: body.gender || "",
@@ -1437,6 +1501,8 @@ function buildStudentPayload(body) {
         bookFee: Number(body.bookFee) || 0,
         stationaryFee: Number(body.stationaryFee) || 0,
         examFee: Number(body.examFee) || 0,
+ 
+        marks: buildMarksPayload(body.marks),
  
         unitTest1: Number(body.unitTest1) || 0,
         unitTest2: Number(body.unitTest2) || 0,

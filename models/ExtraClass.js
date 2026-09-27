@@ -1,5 +1,73 @@
 const mongoose = require("mongoose");
 
+// ==========================================
+// ONE ROW OF MARKS (subject + max + obtained)
+// Used inside every term (unit1, unit2, halfYearly, unit3, unit4, annual)
+// ==========================================
+
+const markRowSchema = new mongoose.Schema(
+    {
+        subject: {
+            type: String,
+            default: ""
+        },
+
+        maxMarks: {
+            type: Number,
+            default: 0
+        },
+
+        obtainedMarks: {
+            type: Number,
+            default: 0
+        }
+    },
+    {
+        _id: false
+    }
+);
+
+// ==========================================
+// ALL TERMS FOR ONE STUDENT
+// Fixed term keys (same as Syllabus): unit1, unit2, halfYearly, unit3, unit4, annual
+// Every term holds an array of markRowSchema (one row per subject).
+// Subjects are kept in sync across every term from the front-end, so
+// adding "Maths" in Unit 1 also creates a "Maths" row (0/0) in every
+// other term automatically.
+// ==========================================
+
+const marksSchema = new mongoose.Schema(
+    {
+        unit1: {
+            type: [markRowSchema],
+            default: []
+        },
+        unit2: {
+            type: [markRowSchema],
+            default: []
+        },
+        halfYearly: {
+            type: [markRowSchema],
+            default: []
+        },
+        unit3: {
+            type: [markRowSchema],
+            default: []
+        },
+        unit4: {
+            type: [markRowSchema],
+            default: []
+        },
+        annual: {
+            type: [markRowSchema],
+            default: []
+        }
+    },
+    {
+        _id: false
+    }
+);
+
 const studentSchema = new mongoose.Schema(
     {
         name: {
@@ -8,6 +76,12 @@ const studentSchema = new mongoose.Schema(
         },
 
         rollNumber: {
+            type: String,
+            default: ""
+        },
+
+        // S.R Number (School Register Number) - shown on the students table & PDF
+        srNumber: {
             type: String,
             default: ""
         },
@@ -23,6 +97,12 @@ const studentSchema = new mongoose.Schema(
         },
 
         motherName: {
+            type: String,
+            default: ""
+        },
+
+        // Father's occupation - shown on the students table & PDF
+        fatherOccupation: {
             type: String,
             default: ""
         },
@@ -54,6 +134,18 @@ const studentSchema = new mongoose.Schema(
             default: "",
             trim: true,
             lowercase: true
+        },
+
+        // Caste - shown on the students table & PDF
+        caste: {
+            type: String,
+            default: ""
+        },
+
+        // Category (General / OBC / SC / ST / EWS ...) - shown on the students table & PDF
+        category: {
+            type: String,
+            default: ""
         },
 
         // ------------------------------
@@ -105,8 +197,15 @@ const studentSchema = new mongoose.Schema(
             default: 0
         },
 
-        // ---- ACADEMIC (flat, matches the form) ----
+        // ---- ACADEMIC / RESULT (subject-wise, per term) ----
 
+        marks: {
+            type: marksSchema,
+            default: () => ({})
+        },
+
+        // Kept ONLY so old flat numbers already saved in the database
+        // are not lost. New data should be entered through "marks" above.
         unitTest1: {
             type: Number,
             default: 0
