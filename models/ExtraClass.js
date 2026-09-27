@@ -148,6 +148,14 @@ const studentSchema = new mongoose.Schema(
             default: ""
         },
 
+        // Student's current school class / grade (e.g. "6th", "10th").
+        // This is separate from the Extra Class's own name (extraClassSchema.className) -
+        // shown on the students table, profile view, filter dropdown & PDF.
+        studentClass: {
+            type: String,
+            default: ""
+        },
+
         // ------------------------------
 
         dob: {

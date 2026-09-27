@@ -1490,6 +1490,7 @@ function buildStudentPayload(body) {
  
         caste: body.caste || "",
         category: body.category || "",
+        studentClass: body.studentClass || "",
  
         dob: body.dob || "",
         gender: body.gender || "",
