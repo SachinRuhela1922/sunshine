@@ -17,6 +17,24 @@ const attendanceSchema = new mongoose.Schema(
             default: ""
         },
 
+        // Holiday support: whole class marked as holiday for the day
+        isHoliday: {
+            type: Boolean,
+            default: false
+        },
+
+        // "Festival" | "General Holiday" | "Other"
+        holidayReason: {
+            type: String,
+            default: ""
+        },
+
+        // Festival name typed by the user (e.g. Diwali, Holi)
+        holidayName: {
+            type: String,
+            default: ""
+        },
+
         students: [
             {
                 studentId: {
@@ -37,7 +55,7 @@ const attendanceSchema = new mongoose.Schema(
 
                 status: {
                     type: String,
-                    enum: ["Present", "Absent"],
+                    enum: ["Present", "Absent", "Holiday"],
                     required: true
                 }
             }

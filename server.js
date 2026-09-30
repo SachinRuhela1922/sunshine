@@ -204,7 +204,10 @@ app.post("/api/attendance", async (req, res) => {
             date,
             className,
             session,
-            students
+            students,
+            isHoliday,
+            holidayReason,
+            holidayName
         } = req.body;
 
 
@@ -222,6 +225,29 @@ app.post("/api/attendance", async (req, res) => {
             });
 
         }
+
+
+        // Holiday handling: agar holiday hai to sabhi students "Holiday" save honge
+        const holidayOn = isHoliday === true || isHoliday === "true";
+
+        if (holidayOn && holidayReason === "Festival" && !(holidayName || "").trim()) {
+
+            return res.status(400).json({
+                success: false,
+                message: "Please enter the festival name."
+            });
+
+        }
+
+        const holidayFields = {
+            isHoliday: holidayOn,
+            holidayReason: holidayOn ? (holidayReason || "Holiday") : "",
+            holidayName: holidayOn ? (holidayName || "").trim() : ""
+        };
+
+        const finalStudents = holidayOn
+            ? students.map(item => ({ ...item, status: "Holiday" }))
+            : students;
 
 
         // Date ko day ke start par normalize karo
@@ -245,10 +271,14 @@ app.post("/api/attendance", async (req, res) => {
 
             // Existing attendance update
             existingAttendance.students =
-                students;
+                finalStudents;
 
             existingAttendance.session =
                 session || "";
+
+            existingAttendance.isHoliday = holidayFields.isHoliday;
+            existingAttendance.holidayReason = holidayFields.holidayReason;
+            existingAttendance.holidayName = holidayFields.holidayName;
 
             await existingAttendance.save();
 
@@ -279,7 +309,9 @@ app.post("/api/attendance", async (req, res) => {
                 session:
                     session || "",
 
-                students
+                students: finalStudents,
+
+                ...holidayFields
 
             });
 
@@ -3668,7 +3700,10 @@ app.get("/api/student/attendance/:studentId", async (req, res) => {
                 studentId: studentRecord?.studentId || student._id,
                 studentName: studentRecord?.studentName || student.studentName,
                 rollNumber: studentRecord?.rollNumber || student.rollNumber,
-                status: studentRecord?.status || "Absent"
+                status: studentRecord?.status || "Absent",
+                isHoliday: !!record.isHoliday,
+                holidayReason: record.holidayReason || "",
+                holidayName: record.holidayName || ""
             };
 
         });
@@ -4832,6 +4867,118 @@ app.get("/api/syllabus", async (req, res) => {
     }
 
 });
+
+
+// ==========================================
+// GET ONE STUDENT'S ATTENDANCE FOR A FULL MONTH
+// month format: YYYY-MM  (used by attendance-fetch.html monthly view + PDF)
+// ==========================================
+
+app.get(
+    "/api/attendance/student-month/:studentMongoId/:month",
+    async (req, res) => {
+
+        try {
+
+            const { studentMongoId, month } = req.params;
+
+            const match = /^(\d{4})-(\d{2})$/.exec(month);
+
+            if (
+                !match ||
+                !mongoose.Types.ObjectId.isValid(studentMongoId)
+            ) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid student and month (YYYY-MM) are required."
+                });
+
+            }
+
+            const year = Number(match[1]);
+            const monthIndex = Number(match[2]) - 1;
+
+            if (monthIndex < 0 || monthIndex > 11) {
+
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid month."
+                });
+
+            }
+
+            const student = await Student
+                .findById(studentMongoId)
+                .lean();
+
+            if (!student) {
+
+                return res.status(404).json({
+                    success: false,
+                    message: "Student not found."
+                });
+
+            }
+
+            const start = new Date(year, monthIndex, 1);
+            const end = new Date(year, monthIndex + 1, 1);
+
+            const records = await Attendance.find({
+                date: { $gte: start, $lt: end },
+                "students.studentId": student._id
+            })
+                .sort({ date: 1 })
+                .lean();
+
+            const pad = n => String(n).padStart(2, "0");
+
+            const days = records.map(record => {
+
+                const entry = record.students.find(
+                    item => String(item.studentId) === String(student._id)
+                );
+
+                const d = new Date(record.date);
+
+                return {
+                    date: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`,
+                    className: record.className,
+                    status: entry?.status || "Absent",
+                    isHoliday: !!record.isHoliday,
+                    holidayReason: record.holidayReason || "",
+                    holidayName: record.holidayName || ""
+                };
+
+            });
+
+            res.status(200).json({
+                success: true,
+                month,
+                student: {
+                    _id: student._id,
+                    studentName: student.studentName || "",
+                    rollNumber: student.rollNumber || "",
+                    className: student.academic?.class || "",
+                    fatherName: student.fatherName || student.father?.name || "",
+                    motherName: student.motherName || student.mother?.name || ""
+                },
+                days
+            });
+
+        } catch (error) {
+
+            console.error("Student month attendance error:", error);
+
+            res.status(500).json({
+                success: false,
+                message: "Unable to load monthly attendance."
+            });
+
+        }
+
+    }
+);
 
 
 // Test route
