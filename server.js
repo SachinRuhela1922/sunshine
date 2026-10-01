@@ -4462,6 +4462,18 @@ app.get("/api/class-student-counts", async (req, res) => {
 
 
 // ==========================================
+// HELPER: "YYYY-MM-DD" -> UTC midnight Date
+// ==========================================
+function toAttendanceDate(dateStr) {
+    if (/^\d{4}-\d{2}-\d{2}/.test(String(dateStr))) {
+        return new Date(String(dateStr).slice(0, 10) + "T00:00:00.000Z");
+    }
+    const d = new Date(dateStr);
+    d.setUTCHours(0, 0, 0, 0);
+    return d;
+}
+
+// ==========================================
 // SAVE / UPDATE TEACHER ATTENDANCE (for a date)
 // ==========================================
 
@@ -4480,27 +4492,58 @@ app.post("/api/teacher-attendance", async (req, res) => {
 
         }
 
-        // Date ko day ke start par normalize karo (jaise student attendance me hota hai)
-        const attendanceDate = new Date(date);
-        attendanceDate.setHours(0, 0, 0, 0);
-
-        // Har teacher entry basic validate kar lo
-        const cleanedTeachers = teachers.map((t) => ({
-            teacher: t.teacher,
-            teacherId: t.teacherId || "",
-            employeeId: t.employeeId || "",
-            name: t.name || "",
-            department: t.department || "",
-            status: t.status || "Present",
-            inTime: t.inTime || "",
-            outTime: t.outTime || ""
-        }));
+        // Date ko UTC midnight par normalize karo (server timezone se koi farak nahi padega)
+        const attendanceDate = toAttendanceDate(date);
 
         const existing = await TeacherAttendance.findOne({
             date: attendanceDate
         });
 
+        // Purani entries ka map (taaki khaali time se purana time overwrite na ho)
+        const oldMap = {};
         if (existing) {
+            existing.teachers.forEach((e) => {
+                oldMap[String(e.teacher)] = e;
+            });
+        }
+
+        const cleanedTeachers = teachers.map((t) => {
+
+            const status = t.status || "Present";
+            let inTime = t.inTime || "";
+            let outTime = t.outTime || "";
+
+            const old = oldMap[String(t.teacher)];
+
+            // Page se time khaali aaya par DB me pehle se saved hai
+            // (aur teacher Absent nahi hai) to purana time safe rakho
+            if (old && status !== "Absent") {
+                if (!inTime) inTime = old.inTime || "";
+                if (!outTime) outTime = old.outTime || "";
+            }
+
+            return {
+                teacher: t.teacher,
+                teacherId: t.teacherId || "",
+                employeeId: t.employeeId || "",
+                name: t.name || "",
+                department: t.department || "",
+                status,
+                inTime,
+                outTime
+            };
+        });
+
+        if (existing) {
+
+            // Payload me jo teachers nahi aaye (jaise baad me inactive ho gaye),
+            // unki purani entries (status + in/out time) delete na ho
+            const sentIds = new Set(cleanedTeachers.map((t) => String(t.teacher)));
+            existing.teachers.forEach((e) => {
+                if (!sentIds.has(String(e.teacher))) {
+                    cleanedTeachers.push(e.toObject());
+                }
+            });
 
             existing.teachers = cleanedTeachers;
             await existing.save();
@@ -4548,8 +4591,9 @@ app.get("/api/teacher-attendance/:date", async (req, res) => {
 
         const { date } = req.params;
 
-        const attendanceDate = new Date(date);
-        attendanceDate.setHours(0, 0, 0, 0);
+        const attendanceDate = toAttendanceDate(date);
+
+        res.set("Cache-Control", "no-store");
 
         const attendance = await TeacherAttendance.findOne({
             date: attendanceDate
@@ -4584,6 +4628,66 @@ app.get("/api/teacher-attendance/:date", async (req, res) => {
 
 
 // ==========================================
+// MONTHLY REPORT OF ONE TEACHER (used for PDF)
+// GET /api/teacher-attendance-report/:teacherId/:month   (month = YYYY-MM)
+// ==========================================
+
+app.get("/api/teacher-attendance-report/:teacherId/:month", async (req, res) => {
+
+    try {
+
+        const { teacherId, month } = req.params;
+
+        if (!/^\d{4}-\d{2}$/.test(month)) {
+            return res.status(400).json({
+                success: false,
+                message: "Month must be in YYYY-MM format."
+            });
+        }
+
+        const [y, m] = month.split("-").map(Number);
+        const start = new Date(Date.UTC(y, m - 1, 1));
+        const end = new Date(Date.UTC(y, m, 1));
+
+        res.set("Cache-Control", "no-store");
+
+        const records = await TeacherAttendance
+            .find({ date: { $gte: start, $lt: end } })
+            .sort({ date: 1 });
+
+        const days = [];
+
+        records.forEach((record) => {
+            const entry = record.teachers.find(
+                (e) => String(e.teacher) === String(teacherId)
+            );
+            if (!entry) return;
+
+            days.push({
+                date: record.date.toISOString().slice(0, 10),
+                status: entry.status,
+                inTime: entry.inTime || "",
+                outTime: entry.outTime || ""
+            });
+        });
+
+        res.status(200).json({ success: true, month, days });
+
+    } catch (error) {
+
+        console.error("Teacher monthly report error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to build monthly report."
+        });
+
+    }
+
+});
+
+
+// ==========================================
 // (OPTIONAL) GET ALL TEACHER ATTENDANCE RECORDS
 // Useful for a history / report page later
 // ==========================================
@@ -4591,6 +4695,8 @@ app.get("/api/teacher-attendance/:date", async (req, res) => {
 app.get("/api/teacher-attendance", async (req, res) => {
 
     try {
+
+        res.set("Cache-Control", "no-store");
 
         const records = await TeacherAttendance
             .find()
