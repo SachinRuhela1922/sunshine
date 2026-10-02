@@ -1256,6 +1256,178 @@ const shirtPantBalanceNumber =
     }
 });
 
+// ==========================================
+// EDIT / UPDATE A SUBMITTED PAYMENT (transaction)
+// PUT /api/payments/:paymentId
+// fee-details.html ka "Edit" button isi route ko call karta hai
+// ==========================================
+
+app.put("/api/payments/:paymentId", async (req, res) => {
+
+    try {
+
+        const { paymentId } = req.params;
+
+        if (!mongoose.Types.ObjectId.isValid(paymentId)) {
+            return res.status(400).json({
+                success: false,
+                message: "Invalid payment id."
+            });
+        }
+
+        const payment = await Payment.findById(paymentId);
+
+        if (!payment) {
+            return res.status(404).json({
+                success: false,
+                message: "Payment record not found."
+            });
+        }
+
+        const {
+            monthlyFee,
+            amount,
+            month,
+            paymentDate,
+            paymentMode,
+            transactionId,
+            additionalFees = {}
+        } = req.body;
+
+        const monthlyFeeNumber = Number(monthlyFee) || 0;
+        const paidNumber = Number(amount) || 0;
+
+        if (monthlyFeeNumber < 0 || paidNumber < 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Fee and payment cannot be negative."
+            });
+        }
+
+        if (!month || !String(month).trim()) {
+            return res.status(400).json({
+                success: false,
+                message: "Month is required."
+            });
+        }
+
+        let newDate = payment.paymentDate;
+
+        if (paymentDate) {
+            const parsed = new Date(paymentDate);
+            if (isNaN(parsed.getTime())) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Invalid payment date."
+                });
+            }
+            newDate = parsed;
+        }
+
+        const feeKeys = [
+            "registrationFee",
+            "conveyanceFee",
+            "bookFee",
+            "stationaryFee",
+            "examFee",
+            "redCrossFee",
+            "scoutFee",
+            "tieBalance",
+            "beltBalance",
+            "shirtPantBalance"
+        ];
+
+        const cleanFees = {};
+
+        feeKeys.forEach(key => {
+            cleanFees[key] = Math.max(Number(additionalFees[key]) || 0, 0);
+        });
+
+        payment.monthlyFee = monthlyFeeNumber;
+        payment.amount = paidNumber;
+        payment.month = String(month).trim();
+        payment.paymentDate = newDate;
+        payment.paymentMode = paymentMode || "Cash";
+        payment.transactionId = transactionId || "";
+        payment.additionalFees = cleanFees;
+
+        await payment.save();
+
+
+        // ------------------------------------------------------
+        // Is student ke saare payments ka stored dueAmount dobara
+        // calculate karo (same ledger formula jo fee-details.html
+        // me use hota hai: previous due + monthly fee + extra fees
+        // + RTE fee - paid), taaki edit ke baad DB me due sahi rahe.
+        // ------------------------------------------------------
+
+        const allPayments = await Payment.find({
+            studentId: payment.studentId
+        }).sort({
+            paymentDate: 1,
+            _id: 1
+        });
+
+        let runningDue = 0;
+        const updates = [];
+
+        allPayments.forEach(p => {
+
+            const fees = p.additionalFees || {};
+
+            let extraTotal = 0;
+
+            feeKeys.forEach(key => {
+                extraTotal += Number(fees[key]) || 0;
+            });
+
+            extraTotal += Number(p.transactionId) || 0;
+
+            runningDue = Math.max(
+                runningDue +
+                (Number(p.monthlyFee) || 0) +
+                extraTotal -
+                (Number(p.amount) || 0),
+                0
+            );
+
+            updates.push({
+                updateOne: {
+                    filter: { _id: p._id },
+                    update: { $set: { dueAmount: runningDue } }
+                }
+            });
+
+        });
+
+        if (updates.length) {
+            await Payment.bulkWrite(updates);
+        }
+
+        const updatedPayment = await Payment.findById(paymentId);
+
+        res.status(200).json({
+            success: true,
+            message: "Payment updated successfully.",
+            payment: updatedPayment,
+            totalDue: runningDue
+        });
+
+    } catch (error) {
+
+        console.error("Payment update error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: "Unable to update payment.",
+            error: error.message
+        });
+
+    }
+
+});
+
+
 app.get("/api/extra-classes", async (req, res) => {
     try {
         const classes = await ExtraClass.find()
