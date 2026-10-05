@@ -3500,6 +3500,38 @@ app.get("/api/admitcard/download", async (req, res) => {
     }
 });
 
+// GET saved admit card schedule (used by admit-card.html to preview/edit)
+app.get("/api/admitcard", async (req, res) => {
+    try {
+        const { exam, className } = req.query;
+
+        if (!exam || !className) {
+            return res.status(400).json({
+                success: false,
+                message: "Exam and class are required"
+            });
+        }
+
+        const admitCard = await AdmitCard.findOne({ exam, className }).lean();
+
+        if (!admitCard) {
+            return res.status(404).json({
+                success: false,
+                message: "Admit card not created yet"
+            });
+        }
+
+        res.json({ success: true, data: admitCard });
+
+    } catch (error) {
+        console.error("Admit card fetch error:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to fetch admit card"
+        });
+    }
+});
+
 app.post("/api/admitcard", async (req, res) => {
     try {
         const { exam, className, subjects } = req.body;
