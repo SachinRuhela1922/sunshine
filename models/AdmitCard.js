@@ -31,18 +31,24 @@ const admitCardSchema = new mongoose.Schema(
                     required: true
                 },
 
-                // e.g. "10:00"  (24-hour, from <input type="time">)
+                // OPTIONAL. e.g. "10:00" (24-hour) or "" when not set
                 startTime: {
                     type: String,
-                    required: true,
-                    match: [TIME_REGEX, "Start time must be in HH:mm format"]
+                    default: "",
+                    validate: {
+                        validator: v => v === "" || TIME_REGEX.test(v),
+                        message: "Start time must be in HH:mm format"
+                    }
                 },
 
-                // e.g. "13:00"
+                // OPTIONAL. e.g. "13:00" or "" when not set
                 endTime: {
                     type: String,
-                    required: true,
-                    match: [TIME_REGEX, "End time must be in HH:mm format"]
+                    default: "",
+                    validate: {
+                        validator: v => v === "" || TIME_REGEX.test(v),
+                        message: "End time must be in HH:mm format"
+                    }
                 }
             }
         ]

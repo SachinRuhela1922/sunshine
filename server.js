@@ -3556,18 +3556,31 @@ app.post("/api/admitcard", async (req, res) => {
                 });
             }
 
-            if (!timeRegex.test(sub.startTime || "") || !timeRegex.test(sub.endTime || "")) {
+            // Time is OPTIONAL: either both empty, or both filled
+            const hasStart = !!sub.startTime;
+            const hasEnd = !!sub.endTime;
+
+            if (hasStart !== hasEnd) {
                 return res.status(400).json({
                     success: false,
-                    message: `Valid start time and end time are required (${label})`
+                    message: `Fill both start and end time, or leave both empty (${label})`
                 });
             }
 
-            if (sub.endTime <= sub.startTime) {
-                return res.status(400).json({
-                    success: false,
-                    message: `End time must be after start time (${label})`
-                });
+            if (hasStart && hasEnd) {
+                if (!timeRegex.test(sub.startTime) || !timeRegex.test(sub.endTime)) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `Invalid time format (${label})`
+                    });
+                }
+
+                if (sub.endTime <= sub.startTime) {
+                    return res.status(400).json({
+                        success: false,
+                        message: `End time must be after start time (${label})`
+                    });
+                }
             }
         }
 
@@ -3575,8 +3588,8 @@ app.post("/api/admitcard", async (req, res) => {
             subject: String(sub.subject).trim(),
             date: sub.date,
             day: sub.day,
-            startTime: sub.startTime,
-            endTime: sub.endTime
+            startTime: sub.startTime || "",
+            endTime: sub.endTime || ""
         }));
 
         const admitCard = await AdmitCard.findOneAndUpdate(
