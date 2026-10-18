@@ -954,6 +954,121 @@ app.get("/api/teachers/:id", async (req, res) => {
 });
 
 
+// ==========================================
+// MULTI-MONTH HELPERS
+// One fee transaction can now cover several months
+// (e.g. November + January paid together).
+// ==========================================
+
+const ACADEMIC_MONTH_ORDER = [
+    "April", "May", "June", "July", "August", "September",
+    "October", "November", "December", "January", "February", "March"
+];
+
+const PAYMENT_EXTRA_FEE_KEYS = [
+    "registrationFee",
+    "conveyanceFee",
+    "bookFee",
+    "stationaryFee",
+    "examFee",
+    "redCrossFee",
+    "scoutFee",
+    "tieBalance",
+    "beltBalance",
+    "shirtPantBalance"
+];
+
+// Accepts months as array / "Nov + Jan" string, or the legacy single
+// `month` string. Returns { months: [...sorted, unique, valid], label }.
+function normalizeMonths(monthsInput, monthInput) {
+
+    let list = [];
+
+    if (Array.isArray(monthsInput)) {
+        list = monthsInput;
+    } else if (typeof monthsInput === "string" && monthsInput.trim()) {
+        list = monthsInput.split(/[+,&]/);
+    }
+
+    if (!list.length && monthInput) {
+        list = String(monthInput).split(/[+,&]/);
+    }
+
+    const valid = [];
+
+    list.forEach(raw => {
+        const name = String(raw || "").trim().toLowerCase();
+        if (!name) return;
+
+        const found = ACADEMIC_MONTH_ORDER.find(
+            m => m.toLowerCase() === name || m.slice(0, 3).toLowerCase() === name.slice(0, 3) && name.length <= 4
+        );
+
+        if (found && !valid.includes(found)) {
+            valid.push(found);
+        }
+    });
+
+    valid.sort(
+        (a, b) => ACADEMIC_MONTH_ORDER.indexOf(a) - ACADEMIC_MONTH_ORDER.indexOf(b)
+    );
+
+    return {
+        months: valid,
+        label: valid.join(" + ")
+    };
+}
+
+// Re-computes the stored running dueAmount of every payment of a
+// student with the same ledger formula fee-details.html uses
+// (previous due + monthly fee + extra fees + RTE fee - paid).
+// Returns the final due.
+async function recomputeStudentDues(studentId) {
+
+    const allPayments = await Payment.find({ studentId }).sort({
+        paymentDate: 1,
+        _id: 1
+    });
+
+    let runningDue = 0;
+    const updates = [];
+
+    allPayments.forEach(p => {
+
+        const fees = p.additionalFees || {};
+
+        let extraTotal = 0;
+
+        PAYMENT_EXTRA_FEE_KEYS.forEach(key => {
+            extraTotal += Number(fees[key]) || 0;
+        });
+
+        extraTotal += Number(p.transactionId) || 0;
+
+        runningDue = Math.max(
+            runningDue +
+            (Number(p.monthlyFee) || 0) +
+            extraTotal -
+            (Number(p.amount) || 0),
+            0
+        );
+
+        updates.push({
+            updateOne: {
+                filter: { _id: p._id },
+                update: { $set: { dueAmount: runningDue } }
+            }
+        });
+    });
+
+    if (updates.length) {
+        await Payment.bulkWrite(updates);
+    }
+
+    return runningDue;
+}
+
+
 app.post("/api/payments", async (req, res) => {
     try {
 
@@ -962,6 +1077,7 @@ app.post("/api/payments", async (req, res) => {
     monthlyFee,
     amount,
     month,
+    months,
     paymentDate,
     paymentMode,
     transactionId,
@@ -994,6 +1110,15 @@ app.post("/api/payments", async (req, res) => {
             return res.status(400).json({
                 success: false,
                 message: "Fee and payment cannot be negative."
+            });
+        }
+
+        const monthInfo = normalizeMonths(months, month);
+
+        if (!monthInfo.months.length) {
+            return res.status(400).json({
+                success: false,
+                message: "Please select at least one month."
             });
         }
 
@@ -1157,7 +1282,10 @@ const shirtPantBalanceNumber =
                 totalDueAfterPayment,
 
             month:
-                month,
+                monthInfo.label,
+
+            months:
+                monthInfo.months,
 
             paymentDate:
                 paymentDate
@@ -1210,6 +1338,13 @@ const shirtPantBalanceNumber =
         });
 
 
+        // Keep every stored dueAmount in sync with the ledger
+        // (handles back-dated / multi-month entries correctly).
+        const ledgerDue = await recomputeStudentDues(student.studentId);
+
+        const savedPayment = await Payment.findById(payment._id);
+
+
         // ==========================================
         // RESPONSE
         // ==========================================
@@ -1221,7 +1356,7 @@ const shirtPantBalanceNumber =
             message:
                 "Fee payment submitted successfully.",
 
-            payment,
+            payment: savedPayment || payment,
 
             previousDue,
 
@@ -1232,7 +1367,7 @@ const shirtPantBalanceNumber =
             currentMonthDue,
 
             totalDue:
-                totalDueAfterPayment
+                ledgerDue
         });
 
 
@@ -1288,6 +1423,7 @@ app.put("/api/payments/:paymentId", async (req, res) => {
             monthlyFee,
             amount,
             month,
+            months,
             paymentDate,
             paymentMode,
             transactionId,
@@ -1304,10 +1440,12 @@ app.put("/api/payments/:paymentId", async (req, res) => {
             });
         }
 
-        if (!month || !String(month).trim()) {
+        const monthInfo = normalizeMonths(months, month);
+
+        if (!monthInfo.months.length) {
             return res.status(400).json({
                 success: false,
-                message: "Month is required."
+                message: "Please select at least one month."
             });
         }
 
@@ -1324,18 +1462,7 @@ app.put("/api/payments/:paymentId", async (req, res) => {
             newDate = parsed;
         }
 
-        const feeKeys = [
-            "registrationFee",
-            "conveyanceFee",
-            "bookFee",
-            "stationaryFee",
-            "examFee",
-            "redCrossFee",
-            "scoutFee",
-            "tieBalance",
-            "beltBalance",
-            "shirtPantBalance"
-        ];
+        const feeKeys = PAYMENT_EXTRA_FEE_KEYS;
 
         const cleanFees = {};
 
@@ -1345,7 +1472,8 @@ app.put("/api/payments/:paymentId", async (req, res) => {
 
         payment.monthlyFee = monthlyFeeNumber;
         payment.amount = paidNumber;
-        payment.month = String(month).trim();
+        payment.month = monthInfo.label;
+        payment.months = monthInfo.months;
         payment.paymentDate = newDate;
         payment.paymentMode = paymentMode || "Cash";
         payment.transactionId = transactionId || "";
@@ -1354,55 +1482,8 @@ app.put("/api/payments/:paymentId", async (req, res) => {
         await payment.save();
 
 
-        // ------------------------------------------------------
-        // Is student ke saare payments ka stored dueAmount dobara
-        // calculate karo (same ledger formula jo fee-details.html
-        // me use hota hai: previous due + monthly fee + extra fees
-        // + RTE fee - paid), taaki edit ke baad DB me due sahi rahe.
-        // ------------------------------------------------------
-
-        const allPayments = await Payment.find({
-            studentId: payment.studentId
-        }).sort({
-            paymentDate: 1,
-            _id: 1
-        });
-
-        let runningDue = 0;
-        const updates = [];
-
-        allPayments.forEach(p => {
-
-            const fees = p.additionalFees || {};
-
-            let extraTotal = 0;
-
-            feeKeys.forEach(key => {
-                extraTotal += Number(fees[key]) || 0;
-            });
-
-            extraTotal += Number(p.transactionId) || 0;
-
-            runningDue = Math.max(
-                runningDue +
-                (Number(p.monthlyFee) || 0) +
-                extraTotal -
-                (Number(p.amount) || 0),
-                0
-            );
-
-            updates.push({
-                updateOne: {
-                    filter: { _id: p._id },
-                    update: { $set: { dueAmount: runningDue } }
-                }
-            });
-
-        });
-
-        if (updates.length) {
-            await Payment.bulkWrite(updates);
-        }
+        // Is student ke saare payments ka stored dueAmount dobara calculate
+        const runningDue = await recomputeStudentDues(payment.studentId);
 
         const updatedPayment = await Payment.findById(paymentId);
 

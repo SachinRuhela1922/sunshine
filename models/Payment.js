@@ -37,9 +37,17 @@ const paymentSchema = new mongoose.Schema(
             required: true
         },
 
+        // Display label, e.g. "November" or "November + January"
         month: {
             type: String,
             required: true
+        },
+
+        // Every month covered by this transaction (one or many),
+        // e.g. ["November", "January"]. Old records simply have [].
+        months: {
+            type: [String],
+            default: []
         },
 
         monthlyFee: {
