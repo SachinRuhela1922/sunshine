@@ -33,57 +33,6 @@ mongoose
 
 
   // ===============================
-// ===============================
-// DOB HELPERS (full date OR year-only)
-// ===============================
-// Accepts a full date (YYYY-MM-DD) or just a 4-digit year.
-// Returns { dob, dobYear, error }
-function parseDobInput(dobRaw, yearRaw) {
-    const dob = String(dobRaw == null ? "" : dobRaw).trim();
-    const yearText = String(yearRaw == null ? "" : yearRaw).trim();
-    const thisYear = new Date().getFullYear();
-
-    // 1) Full date given
-    const full = dob.match(/^(\d{4})-(\d{2})-(\d{2})/);
-    if (full) {
-        const check = new Date(dob.substring(0, 10) + "T00:00:00Z");
-        if (isNaN(check.getTime())) {
-            return { error: "Invalid date of birth." };
-        }
-        return { dob: dob.substring(0, 10), dobYear: full[1] };
-    }
-
-    // 2) Only a year given (in dob field or in dobYear field)
-    const onlyYear = /^\d{4}$/.test(dob) ? dob : yearText;
-    if (onlyYear) {
-        const y = Number(onlyYear);
-        if (!/^\d{4}$/.test(onlyYear) || y < 1900 || y > thisYear) {
-            return { error: "Please enter a valid birth year (1900 - " + thisYear + ")." };
-        }
-        return { dob: "", dobYear: String(y) };
-    }
-
-    // 3) Nothing given - DOB is optional
-    return { dob: "", dobYear: "" };
-}
-
-// Main Student model: dob is a Date, so year-only goes in dobYear and dob stays null.
-function applyMainStudentDob(data) {
-    if (!("dob" in data) && !("dobYear" in data)) return null;
-    const r = parseDobInput(data.dob, data.dobYear);
-    if (r.error) return r.error;
-    data.dob = r.dob ? r.dob : null;
-    data.dobYear = r.dobYear;
-    return null;
-}
-
-// Extra class student: dob is a String - holds "YYYY-MM-DD", "YYYY" or "".
-function normalizeExtraDob(dobRaw, yearRaw) {
-    const r = parseDobInput(dobRaw, yearRaw);
-    if (r.error) return { error: r.error };
-    return { dob: r.dob || r.dobYear || "" };
-}
-
 // ADD STUDENT
 // ===============================
 
@@ -172,17 +121,6 @@ app.post("/api/students", async (req, res) => {
         const studentId =
             "STD" +
             String(studentNumber).padStart(4, "0");
-
-
-        // ==========================================
-        // DOB (full date OR year only)
-        // ==========================================
-
-        const dobError = applyMainStudentDob(data);
-
-        if (dobError) {
-            return res.status(400).json({ message: dobError });
-        }
 
 
         // ==========================================
@@ -1839,7 +1777,7 @@ function buildStudentPayload(body) {
         category: body.category || "",
         studentClass: body.studentClass || "",
  
-        dob: (normalizeExtraDob(body.dob, body.dobYear).dob) || "",
+        dob: body.dob || "",
         gender: body.gender || "",
         address: body.address || "",
  
@@ -1885,15 +1823,6 @@ app.post("/api/extra-classes/:classId/students", async (req, res) => {
         }
  
         const studentData = buildStudentPayload(req.body);
- 
-        const dobCheck = normalizeExtraDob(req.body.dob, req.body.dobYear);
- 
-        if (dobCheck.error) {
-            return res.status(400).json({
-                success: false,
-                message: dobCheck.error
-            });
-        }
  
         if (!studentData.name.trim()) {
             return res.status(400).json({
@@ -1963,15 +1892,6 @@ app.put("/api/extra-classes/:classId/students/:studentId", async (req, res) => {
         }
  
         const studentData = buildStudentPayload(req.body);
- 
-        const dobCheck = normalizeExtraDob(req.body.dob, req.body.dobYear);
- 
-        if (dobCheck.error) {
-            return res.status(400).json({
-                success: false,
-                message: dobCheck.error
-            });
-        }
  
         if (
             studentData.aadharNumber &&
@@ -2347,17 +2267,6 @@ app.put("/api/students/:id", async (req, res) => {
 
             }
 
-        }
-
-
-        // DOB (full date OR year only)
-        const dobError = applyMainStudentDob(updatedData);
-
-        if (dobError) {
-            return res.status(400).json({
-                success: false,
-                message: dobError
-            });
         }
 
 
@@ -2878,9 +2787,6 @@ app.post("/api/exam-marks", async (req, res) => {
 
                 dob:
                     student.dob || "",
-
-                dobYear:
-                    student.dobYear || "",
 
                 address:
                     student.address || "",
@@ -3635,7 +3541,7 @@ app.get("/api/admitcard/download", async (req, res) => {
                     student.mother?.name || "",
                     student.dob
                         ? new Date(student.dob).toLocaleDateString("en-IN")
-                        : (student.dobYear || ""),
+                        : "",
                     student.gender || "",
                     student.academic?.class || "",
                     student.academic?.section || "",
@@ -3947,36 +3853,27 @@ app.post("/api/students/login", async (req, res) => {
         }
 
         /*
-         * MongoDB Date can contain time.
-         * So don't search using exact Date.
-         * Search between start and end of that date.
+         * DOB is now saved as typed text, so match the text the student
+         * entered (with a few common spellings). Old records that still
+         * hold a real Date are matched with the date range below.
          */
 
-        const startDate = new Date(
-            year,
-            month - 1,
-            day,
-            0,
-            0,
-            0,
-            0
-        );
+        const pad = n => String(n).padStart(2, "0");
+        const textVariants = new Set();
 
-        const endDate = new Date(
-            year,
-            month - 1,
-            day + 1,
-            0,
-            0,
-            0,
-            0
-        );
+        [ "/", "-", "." ].forEach(sep => {
+            textVariants.add(pad(day) + sep + pad(month) + sep + year);
+            textVariants.add(day + sep + month + sep + year);
+        });
+
+        const startDate = new Date(year, month - 1, day, 0, 0, 0, 0);
+        const endDate = new Date(year, month - 1, day + 1, 0, 0, 0, 0);
 
         const student = await Student.findOne({
-            dob: {
-                $gte: startDate,
-                $lt: endDate
-            }
+            $or: [
+                { dob: { $in: Array.from(textVariants) } },
+                { dob: { $gte: startDate, $lt: endDate } }
+            ]
         }).select("-__v");
 
         if (!student) {

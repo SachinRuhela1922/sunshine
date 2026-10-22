@@ -24,8 +24,14 @@ const studentSchema = new mongoose.Schema(
             type: String
         },
 
+        // Date of birth is typed by hand and saved exactly as TEXT,
+        // e.g. "21/05/2008", "21-05-2008", or just "2008" when only the year is known.
+        // Mixed (not String) so old records that were saved as real Dates
+        // are not damaged - they are shown as DD/MM/YYYY by the front-end.
         dob: {
-            type: Date
+            type: mongoose.Schema.Types.Mixed,
+            default: "",
+            set: v => (typeof v === "string" ? v.trim() : v)
         },
 
         gender: {

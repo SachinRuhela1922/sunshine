@@ -158,11 +158,8 @@ const studentSchema = new mongoose.Schema(
 
         // ------------------------------
 
-        // Date of birth. Stored as a String so it can be either:
-        //   - a full date  -> "2008-05-21"  (YYYY-MM-DD)
-        //   - year only    -> "2008"        (when the exact date is unknown)
-        //   - empty        -> ""            (DOB is optional)
-        // Validation / normalising is done in server.js (normalizeExtraDob).
+        // Date of birth - typed by hand, saved exactly as text
+        // (e.g. "21/05/2008" or just "2008").
         dob: {
             type: String,
             default: "",
