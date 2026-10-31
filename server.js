@@ -2,6 +2,7 @@ const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
 const Student = require("./models/Student");
+const { formatDOB } = require("./utils/dob");
 const Teacher = require("./models/Teacher");
 const Payment = require("./models/Payment");
 const Attendance = require("./models/Attendance");
@@ -1777,7 +1778,7 @@ function buildStudentPayload(body) {
         category: body.category || "",
         studentClass: body.studentClass || "",
  
-        dob: body.dob || "",
+        dob: formatDOB(body.dob),
         gender: body.gender || "",
         address: body.address || "",
  
@@ -3539,9 +3540,7 @@ app.get("/api/admitcard/download", async (req, res) => {
                     student.rollNumber || "",
                     student.father?.name || "",
                     student.mother?.name || "",
-                    student.dob
-                        ? new Date(student.dob).toLocaleDateString("en-IN")
-                        : "",
+                    formatDOB(student.dob),
                     student.gender || "",
                     student.academic?.class || "",
                     student.academic?.section || "",
