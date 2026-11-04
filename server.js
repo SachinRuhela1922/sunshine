@@ -966,18 +966,64 @@ const ACADEMIC_MONTH_ORDER = [
     "October", "November", "December", "January", "February", "March"
 ];
 
+// Saare fee heads jo ek payment me store hote hain.
+// NOTE: "tieBalance" aur "beltBalance" LEGACY hain (purane records me tie
+// aur belt alag-alag the). Dues calculate karte time ye abhi bhi count hote
+// hain, taaki purana data bilkul sahi rahe. Naye / edit kiye records me tie
+// + belt ek hi field "tieBeltBalance" me jaate hain.
 const PAYMENT_EXTRA_FEE_KEYS = [
     "registrationFee",
     "conveyanceFee",
     "bookFee",
     "stationaryFee",
     "examFee",
+    "oneYearExamFee",
     "redCrossFee",
     "scoutFee",
+    "tieBeltBalance",
+    "idCardFee",
+    "shirtPantBalance",
+    // legacy
     "tieBalance",
-    "beltBalance",
-    "shirtPantBalance"
+    "beltBalance"
 ];
+
+// req.body.additionalFees ko clean karta hai:
+//  - har fee head number (>= 0) banta hai
+//  - agar koi purana client tieBalance / beltBalance bheje to wo
+//    tieBeltBalance me jud jaata hai (legacy fields hamesha 0 save hote hain)
+function buildCleanAdditionalFees(input) {
+
+    const source = input && typeof input === "object" ? input : {};
+
+    const clean = {};
+
+    PAYMENT_EXTRA_FEE_KEYS.forEach(key => {
+        clean[key] = Math.max(Number(source[key]) || 0, 0);
+    });
+
+    clean.tieBeltBalance += clean.tieBalance + clean.beltBalance;
+    clean.tieBalance = 0;
+    clean.beltBalance = 0;
+
+    return clean;
+}
+
+// GET response ke liye: har fee head ek number hota hai (purane records me
+// jo fields nahi the wo 0). Legacy tieBalance / beltBalance bhi bheje jaate
+// hain taaki frontend purane records ko sahi jod sake.
+function formatPaymentFees(fees) {
+
+    const source = fees || {};
+
+    const out = {};
+
+    PAYMENT_EXTRA_FEE_KEYS.forEach(key => {
+        out[key] = Number(source[key]) || 0;
+    });
+
+    return out;
+}
 
 // Accepts months as array / "Nov + Jan" string, or the legacy single
 // `month` string. Returns { months: [...sorted, unique, valid], label }.
@@ -1128,35 +1174,7 @@ app.post("/api/payments", async (req, res) => {
         // EXTRA FEES
         // ==========================================
 
-        const registrationFeeNumber =
-    Math.max(Number(additionalFees.registrationFee) || 0, 0);
-
-const conveyanceFeeNumber =
-    Math.max(Number(additionalFees.conveyanceFee) || 0, 0);
-
-const bookFeeNumber =
-    Math.max(Number(additionalFees.bookFee) || 0, 0);
-
-const stationaryFeeNumber =
-    Math.max(Number(additionalFees.stationaryFee) || 0, 0);
-
-const examFeeNumber =
-    Math.max(Number(additionalFees.examFee) || 0, 0);
-
-const redCrossFeeNumber =
-    Math.max(Number(additionalFees.redCrossFee) || 0, 0);
-
-const scoutFeeNumber =
-    Math.max(Number(additionalFees.scoutFee) || 0, 0);
-
-const tieBalanceNumber =
-    Math.max(Number(additionalFees.tieBalance) || 0, 0);
-
-const beltBalanceNumber =
-    Math.max(Number(additionalFees.beltBalance) || 0, 0);
-
-const shirtPantBalanceNumber =
-    Math.max(Number(additionalFees.shirtPantBalance) || 0, 0);
+        const cleanFees = buildCleanAdditionalFees(additionalFees);
 
         // ==========================================
         // FIND PREVIOUS PAYMENTS
@@ -1304,38 +1322,7 @@ const shirtPantBalanceNumber =
             // ADDITIONAL FEES
             // --------------------------------------
 
-            additionalFees: {
-
-                registrationFee:
-                    registrationFeeNumber,
-
-                conveyanceFee:
-                    conveyanceFeeNumber,
-
-                bookFee:
-                    bookFeeNumber,
-
-                stationaryFee:
-                    stationaryFeeNumber,
-
-                examFee:
-                    examFeeNumber,
-
-                redCrossFee:
-                    redCrossFeeNumber,
-
-                scoutFee:
-                    scoutFeeNumber,
-
-                tieBalance:
-                    tieBalanceNumber,
-
-                beltBalance:
-                    beltBalanceNumber,
-
-                shirtPantBalance:
-                    shirtPantBalanceNumber
-            }
+            additionalFees: cleanFees
         });
 
 
@@ -1463,13 +1450,7 @@ app.put("/api/payments/:paymentId", async (req, res) => {
             newDate = parsed;
         }
 
-        const feeKeys = PAYMENT_EXTRA_FEE_KEYS;
-
-        const cleanFees = {};
-
-        feeKeys.forEach(key => {
-            cleanFees[key] = Math.max(Number(additionalFees[key]) || 0, 0);
-        });
+        const cleanFees = buildCleanAdditionalFees(additionalFees);
 
         payment.monthlyFee = monthlyFeeNumber;
         payment.amount = paidNumber;
@@ -1987,37 +1968,7 @@ app.get("/api/payments/student/:studentId", async (req, res) => {
         const formattedPayments = payments.map(payment => ({
             ...payment,
 
-            additionalFees: {
-                registrationFee:
-                    Number(payment.additionalFees?.registrationFee) || 0,
-
-                conveyanceFee:
-                    Number(payment.additionalFees?.conveyanceFee) || 0,
-
-                bookFee:
-                    Number(payment.additionalFees?.bookFee) || 0,
-
-                stationaryFee:
-                    Number(payment.additionalFees?.stationaryFee) || 0,
-
-                examFee:
-                    Number(payment.additionalFees?.examFee) || 0,
-
-                redCrossFee:
-                    Number(payment.additionalFees?.redCrossFee) || 0,
-
-                scoutFee:
-                    Number(payment.additionalFees?.scoutFee) || 0,
-
-                tieBalance:
-                    Number(payment.additionalFees?.tieBalance) || 0,
-
-                beltBalance:
-                    Number(payment.additionalFees?.beltBalance) || 0,
-
-                shirtPantBalance:
-                    Number(payment.additionalFees?.shirtPantBalance) || 0
-            }
+            additionalFees: formatPaymentFees(payment.additionalFees)
         }));
 
         res.json({

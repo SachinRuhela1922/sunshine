@@ -73,57 +73,82 @@ const paymentSchema = new mongoose.Schema(
         transactionId: {
             type: String,
             default: ""
-        },additionalFees: {
-    registrationFee: {
-        type: Number,
-        default: 0
-    },
+        },
 
-    conveyanceFee: {
-        type: Number,
-        default: 0
-    },
+        additionalFees: {
 
-    bookFee: {
-        type: Number,
-        default: 0
-    },
+            registrationFee: {
+                type: Number,
+                default: 0
+            },
 
-    stationaryFee: {
-        type: Number,
-        default: 0
-    },
+            conveyanceFee: {
+                type: Number,
+                default: 0
+            },
 
-    examFee: {
-        type: Number,
-        default: 0
-    },
+            bookFee: {
+                type: Number,
+                default: 0
+            },
 
-    redCrossFee: {
-        type: Number,
-        default: 0
-    },
+            stationaryFee: {
+                type: Number,
+                default: 0
+            },
 
-    scoutFee: {
-        type: Number,
-        default: 0
-    },
+            examFee: {
+                type: Number,
+                default: 0
+            },
 
-    tieBalance: {
-        type: Number,
-        default: 0
-    },
+            // NEW: One Year Exam Fee
+            oneYearExamFee: {
+                type: Number,
+                default: 0
+            },
 
-    beltBalance: {
-        type: Number,
-        default: 0
-    },
+            redCrossFee: {
+                type: Number,
+                default: 0
+            },
 
-    shirtPantBalance: {
-        type: Number,
-        default: 0
-    }
-}
+            scoutFee: {
+                type: Number,
+                default: 0
+            },
+
+            // NEW: Tie + Belt ab ek hi balance me
+            tieBeltBalance: {
+                type: Number,
+                default: 0
+            },
+
+            // NEW: I-Card Fee
+            idCardFee: {
+                type: Number,
+                default: 0
+            },
+
+            shirtPantBalance: {
+                type: Number,
+                default: 0
+            },
+
+            // LEGACY: purane records me tie aur belt alag-alag save the.
+            // Inhe hataya nahi gaya taaki purana data aur purani dues
+            // bilkul sahi rahein. Naye / edit kiye records me ye 0 rehte
+            // hain (value tieBeltBalance me chali jaati hai).
+            tieBalance: {
+                type: Number,
+                default: 0
+            },
+
+            beltBalance: {
+                type: Number,
+                default: 0
+            }
+        }
     },
     {
         timestamps: true
