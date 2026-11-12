@@ -1025,6 +1025,27 @@ function formatPaymentFees(fees) {
     return out;
 }
 
+// models/Payment.js me saare fee heads hone chahiye. Agar purana
+// Payment.js chal raha hai to Mongoose naye fields (jaise oneYearExamFee,
+// idCardFee) chupchap hata deta hai — fee save hi nahi hoti, sirf "paid"
+// dikhta hai. Isliye yaha check karte hain aur saaf error dete hain.
+function getMissingFeeSchemaKeys() {
+    return PAYMENT_EXTRA_FEE_KEYS.filter(
+        key => !Payment.schema.path("additionalFees." + key)
+    );
+}
+
+(function warnIfPaymentModelIsOld() {
+    const missing = getMissingFeeSchemaKeys();
+    if (missing.length) {
+        console.error(
+            "⚠️  models/Payment.js PURANA hai — ye fee fields missing hain: " +
+            missing.join(", ") +
+            ". Naya Payment.js models/ folder me daalo aur server restart karo."
+        );
+    }
+})();
+
 // Accepts months as array / "Nov + Jan" string, or the legacy single
 // `month` string. Returns { months: [...sorted, unique, valid], label }.
 function normalizeMonths(monthsInput, monthInput) {
@@ -1175,6 +1196,18 @@ app.post("/api/payments", async (req, res) => {
         // ==========================================
 
         const cleanFees = buildCleanAdditionalFees(additionalFees);
+
+        const missingFeeFields = getMissingFeeSchemaKeys();
+
+        if (missingFeeFields.length) {
+            return res.status(500).json({
+                success: false,
+                message:
+                    "models/Payment.js update nahi hua (missing: " +
+                    missingFeeFields.join(", ") +
+                    "). Naya Payment.js daal kar server restart karo."
+            });
+        }
 
         // ==========================================
         // FIND PREVIOUS PAYMENTS
@@ -1451,6 +1484,18 @@ app.put("/api/payments/:paymentId", async (req, res) => {
         }
 
         const cleanFees = buildCleanAdditionalFees(additionalFees);
+
+        const missingFeeFields = getMissingFeeSchemaKeys();
+
+        if (missingFeeFields.length) {
+            return res.status(500).json({
+                success: false,
+                message:
+                    "models/Payment.js update nahi hua (missing: " +
+                    missingFeeFields.join(", ") +
+                    "). Naya Payment.js daal kar server restart karo."
+            });
+        }
 
         payment.monthlyFee = monthlyFeeNumber;
         payment.amount = paidNumber;
@@ -5040,6 +5085,73 @@ app.put("/api/classes/:id", async (req, res) => {
       message: "Unable to update class",
       error: error.message
     });
+  }
+});
+
+
+// ==========================================
+// DELETE CLASS
+// DELETE /api/classes/:id
+//
+// Safety: jis class me students hain wo delete nahi hoti
+// (students ka data kabhi nahi hatta). Pehle students ko
+// dusri class me shift / delete karo, phir class delete hogi.
+// ==========================================
+
+app.delete("/api/classes/:id", async (req, res) => {
+
+  try {
+
+    const { id } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid class id"
+      });
+    }
+
+    const classData = await Class.findById(id);
+
+    if (!classData) {
+      return res.status(404).json({
+        success: false,
+        message: "Class not found"
+      });
+    }
+
+    const studentCount = await Student.countDocuments({
+      "academic.class": classData.name
+    });
+
+    if (studentCount > 0) {
+      return res.status(409).json({
+        success: false,
+        message:
+          `Is class me ${studentCount} student(s) hain, isliye class delete nahi ho sakti. ` +
+          `Pehle students ko dusri class me shift karo ya delete karo.`,
+        studentCount
+      });
+    }
+
+    await Class.findByIdAndDelete(id);
+
+    res.json({
+      success: true,
+      message: `Class "${classData.name}" deleted successfully.`,
+      deletedClass: classData
+    });
+
+  } catch (error) {
+
+    console.error("Delete class error:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Unable to delete class",
+      error: error.message
+    });
+
   }
 });
 
