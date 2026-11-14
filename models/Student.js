@@ -68,14 +68,24 @@ const studentSchema = new mongoose.Schema(
             name: String,
             phone: String,
             email: String,
-            occupation: String
+            occupation: String,
+            // Aadhaar card image stored on Cloudinary
+            aadhaarImage: {
+                url: { type: String, default: "" },
+                publicId: { type: String, default: "" }
+            }
         },
 
         mother: {
             name: String,
             phone: String,
             email: String,
-            occupation: String
+            occupation: String,
+            // Aadhaar card image stored on Cloudinary
+            aadhaarImage: {
+                url: { type: String, default: "" },
+                publicId: { type: String, default: "" }
+            }
         },
 
         guardian: {
@@ -149,7 +159,12 @@ const studentSchema = new mongoose.Schema(
             birthCertificateNumber: String,
             aadhaarNumber: String,
             previousMarksheetNumber: String,
-            transferCertificateNumber: String
+            transferCertificateNumber: String,
+            // Student's own Aadhaar card image stored on Cloudinary
+            aadhaarImage: {
+                url: { type: String, default: "" },
+                publicId: { type: String, default: "" }
+            }
         },
 
         status: {

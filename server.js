@@ -1,3 +1,6 @@
+// .env file (CLOUDINARY_* keys) load karta hai - sabse upar hona zaroori hai
+require("dotenv").config();
+
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -14,6 +17,8 @@ const TimeTable = require("./models/TimeTable");
 const TeacherAttendance = require("./models/TeacherAttendance");
 const Class = require("./models/Class");
 const Syllabus = require("./models/Syllabus");
+const multer = require("multer");
+const cloudinary = require("cloudinary").v2;
 const app = express();
 
 
@@ -21,6 +26,81 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+
+// ==========================================
+// CLOUDINARY CONFIG
+// Render dashboard > Environment me ye 3 variables daalo:
+//   CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
+// ==========================================
+
+cloudinary.config({
+    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
+    api_key: process.env.CLOUDINARY_API_KEY,
+    api_secret: process.env.CLOUDINARY_API_SECRET,
+    secure: true
+});
+
+const AADHAAR_FOLDER = "sunshine/aadhaar";
+
+// Image memory me aati hai, seedha Cloudinary par jaati hai (disk par save nahi hoti)
+const aadhaarUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+    fileFilter: (req, file, cb) => {
+        if (/^image\/(jpeg|png|webp)$/.test(file.mimetype)) {
+            cb(null, true);
+        } else {
+            cb(new Error("ONLY_IMAGES"));
+        }
+    }
+});
+
+// Frontend se aayi aadhaarImage ko clean karta hai: sirf hamare
+// Cloudinary folder ki image hi accept hoti hai.
+function cleanAadhaarImage(img) {
+
+    if (!img || typeof img !== "object") return undefined;
+
+    const url = String(img.url || "");
+    const publicId = String(img.publicId || "");
+
+    if (
+        !url.startsWith("https://res.cloudinary.com/") ||
+        !publicId.startsWith(AADHAAR_FOLDER + "/")
+    ) {
+        return undefined;
+    }
+
+    return { url, publicId };
+}
+
+function applyAadhaarClean(data) {
+
+    ["father", "mother", "documents"].forEach(key => {
+
+        if (data[key] && typeof data[key] === "object") {
+
+            const clean = cleanAadhaarImage(data[key].aadhaarImage);
+
+            if (clean) {
+                data[key].aadhaarImage = clean;
+            } else {
+                delete data[key].aadhaarImage;
+            }
+        }
+    });
+}
+
+async function destroyCloudinaryImage(publicId) {
+
+    if (!publicId) return;
+
+    try {
+        await cloudinary.uploader.destroy(publicId);
+    } catch (error) {
+        console.error("Cloudinary delete error:", error.message);
+    }
+}
 
 // MongoDB Connection
 mongoose
@@ -33,6 +113,76 @@ mongoose
     });
 
 
+// ==========================================
+// UPLOAD AADHAAR IMAGE (Cloudinary)
+// POST /api/upload/aadhaar   (multipart, field name: "aadhaar")
+// ==========================================
+
+app.post("/api/upload/aadhaar", (req, res) => {
+
+    aadhaarUpload.single("aadhaar")(req, res, async (err) => {
+
+        if (err) {
+
+            let message = "Unable to read the file.";
+
+            if (err.code === "LIMIT_FILE_SIZE") {
+                message = "Image must be smaller than 5 MB.";
+            } else if (err.message === "ONLY_IMAGES") {
+                message = "Only JPG, PNG or WEBP images are allowed.";
+            }
+
+            return res.status(400).json({ success: false, message });
+        }
+
+        if (!req.file) {
+            return res.status(400).json({
+                success: false,
+                message: "Please choose an image."
+            });
+        }
+
+        if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+            return res.status(500).json({
+                success: false,
+                message: "Cloudinary is not configured on the server."
+            });
+        }
+
+        try {
+
+            const result = await new Promise((resolve, reject) => {
+
+                const stream = cloudinary.uploader.upload_stream(
+                    {
+                        folder: AADHAAR_FOLDER,
+                        resource_type: "image"
+                    },
+                    (error, uploaded) => error ? reject(error) : resolve(uploaded)
+                );
+
+                stream.end(req.file.buffer);
+            });
+
+            res.status(201).json({
+                success: true,
+                url: result.secure_url,
+                publicId: result.public_id
+            });
+
+        } catch (error) {
+
+            console.error("Aadhaar upload error:", error);
+
+            res.status(500).json({
+                success: false,
+                message: "Image upload failed. Please try again."
+            });
+        }
+    });
+});
+
+
   // ===============================
 // ADD STUDENT
 // ===============================
@@ -42,6 +192,8 @@ app.post("/api/students", async (req, res) => {
     try {
 
         const data = req.body;
+
+        applyAadhaarClean(data);
 
         if (
             !data.studentName ||
@@ -2240,6 +2392,9 @@ app.put("/api/students/:id", async (req, res) => {
         delete updatedData.createdAt;
         delete updatedData.updatedAt;
 
+        // Sirf valid Cloudinary Aadhaar images allow karo
+        applyAadhaarClean(updatedData);
+
 
         // Check admission number duplication
         if (updatedData.admissionNumber) {
@@ -2276,6 +2431,18 @@ app.put("/api/students/:id", async (req, res) => {
             runValidators: true
         }
     );
+
+
+        // Jo purani Aadhaar image replace / remove hui hai use Cloudinary se delete karo
+        ["father", "mother", "documents"].forEach(parent => {
+
+            const oldId = student[parent]?.aadhaarImage?.publicId;
+            const newId = updatedStudent?.[parent]?.aadhaarImage?.publicId;
+
+            if (oldId && oldId !== newId) {
+                destroyCloudinaryImage(oldId);
+            }
+        });
 
 
         res.status(200).json({
@@ -4525,6 +4692,11 @@ app.delete("/api/students/:id", async (req, res) => {
                 message: "Student not found."
             });
         }
+
+        // Student ke saath uske parents ki Aadhaar images bhi Cloudinary se hatao
+        destroyCloudinaryImage(deletedStudent.father?.aadhaarImage?.publicId);
+        destroyCloudinaryImage(deletedStudent.mother?.aadhaarImage?.publicId);
+        destroyCloudinaryImage(deletedStudent.documents?.aadhaarImage?.publicId);
 
         res.status(200).json({
             success: true,
