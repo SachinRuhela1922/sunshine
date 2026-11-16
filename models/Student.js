@@ -73,6 +73,11 @@ const studentSchema = new mongoose.Schema(
             aadhaarImage: {
                 url: { type: String, default: "" },
                 publicId: { type: String, default: "" }
+            },
+            // Back side of the Aadhaar card
+            aadhaarBackImage: {
+                url: { type: String, default: "" },
+                publicId: { type: String, default: "" }
             }
         },
 
@@ -83,6 +88,11 @@ const studentSchema = new mongoose.Schema(
             occupation: String,
             // Aadhaar card image stored on Cloudinary
             aadhaarImage: {
+                url: { type: String, default: "" },
+                publicId: { type: String, default: "" }
+            },
+            // Back side of the Aadhaar card
+            aadhaarBackImage: {
                 url: { type: String, default: "" },
                 publicId: { type: String, default: "" }
             }
@@ -162,6 +172,11 @@ const studentSchema = new mongoose.Schema(
             transferCertificateNumber: String,
             // Student's own Aadhaar card image stored on Cloudinary
             aadhaarImage: {
+                url: { type: String, default: "" },
+                publicId: { type: String, default: "" }
+            },
+            // Back side of the Aadhaar card
+            aadhaarBackImage: {
                 url: { type: String, default: "" },
                 publicId: { type: String, default: "" }
             }

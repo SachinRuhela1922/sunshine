@@ -92,13 +92,17 @@ function applyAadhaarClean(data) {
 
         if (data[key] && typeof data[key] === "object") {
 
-            const clean = cleanAadhaarImage(data[key].aadhaarImage);
+            // aadhaarImage = Front side, aadhaarBackImage = Back side
+            ["aadhaarImage", "aadhaarBackImage"].forEach(field => {
 
-            if (clean) {
-                data[key].aadhaarImage = clean;
-            } else {
-                delete data[key].aadhaarImage;
-            }
+                const clean = cleanAadhaarImage(data[key][field]);
+
+                if (clean) {
+                    data[key][field] = clean;
+                } else {
+                    delete data[key][field];
+                }
+            });
         }
     });
 }
@@ -134,7 +138,7 @@ mongoose
 app.get("/api/cloudinary-check", async (req, res) => {
 
     const info = {
-        codeVersion: "aadhaar-v3",
+        codeVersion: "aadhaar-v4-front-back",
         cloud_name: cleanEnv(process.env.CLOUDINARY_CLOUD_NAME) ? "set" : "MISSING",
         api_key: cleanEnv(process.env.CLOUDINARY_API_KEY) ? "set" : "MISSING",
         api_secret: cleanEnv(process.env.CLOUDINARY_API_SECRET) ? "set" : "MISSING"
@@ -2479,12 +2483,15 @@ app.put("/api/students/:id", async (req, res) => {
         // Jo purani Aadhaar image replace / remove hui hai use Cloudinary se delete karo
         ["father", "mother", "documents"].forEach(parent => {
 
-            const oldId = student[parent]?.aadhaarImage?.publicId;
-            const newId = updatedStudent?.[parent]?.aadhaarImage?.publicId;
+            ["aadhaarImage", "aadhaarBackImage"].forEach(field => {
 
-            if (oldId && oldId !== newId) {
-                destroyCloudinaryImage(oldId);
-            }
+                const oldId = student[parent]?.[field]?.publicId;
+                const newId = updatedStudent?.[parent]?.[field]?.publicId;
+
+                if (oldId && oldId !== newId) {
+                    destroyCloudinaryImage(oldId);
+                }
+            });
         });
 
 
@@ -4740,6 +4747,9 @@ app.delete("/api/students/:id", async (req, res) => {
         destroyCloudinaryImage(deletedStudent.father?.aadhaarImage?.publicId);
         destroyCloudinaryImage(deletedStudent.mother?.aadhaarImage?.publicId);
         destroyCloudinaryImage(deletedStudent.documents?.aadhaarImage?.publicId);
+        destroyCloudinaryImage(deletedStudent.father?.aadhaarBackImage?.publicId);
+        destroyCloudinaryImage(deletedStudent.mother?.aadhaarBackImage?.publicId);
+        destroyCloudinaryImage(deletedStudent.documents?.aadhaarBackImage?.publicId);
 
         res.status(200).json({
             success: true,
