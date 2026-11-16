@@ -126,6 +126,34 @@ mongoose
 
 
 // ==========================================
+// CLOUDINARY CHECK (sirf testing ke liye)
+// Browser me kholo: https://YOUR-SERVER/api/cloudinary-check
+// Kaam ho jaye to ye route hata dena.
+// ==========================================
+
+app.get("/api/cloudinary-check", async (req, res) => {
+
+    const info = {
+        codeVersion: "aadhaar-v3",
+        cloud_name: cleanEnv(process.env.CLOUDINARY_CLOUD_NAME) ? "set" : "MISSING",
+        api_key: cleanEnv(process.env.CLOUDINARY_API_KEY) ? "set" : "MISSING",
+        api_secret: cleanEnv(process.env.CLOUDINARY_API_SECRET) ? "set" : "MISSING"
+    };
+
+    try {
+        const ping = await cloudinary.api.ping();
+        res.json({ ...info, cloudinary: "CONNECTED", ping });
+    } catch (error) {
+        res.status(500).json({
+            ...info,
+            cloudinary: "FAILED",
+            reason: error?.error?.message || error?.message || "Unknown error"
+        });
+    }
+});
+
+
+// ==========================================
 // UPLOAD AADHAAR IMAGE (Cloudinary)
 // POST /api/upload/aadhaar   (multipart, field name: "aadhaar")
 // ==========================================
