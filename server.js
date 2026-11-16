@@ -33,12 +33,24 @@ app.use(express.json());
 //   CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
 // ==========================================
 
+// Extra spaces ya quotes ("...") hata deta hai - Render me ye aksar galti se lag jaate hain
+const cleanEnv = (value) => String(value || "").trim().replace(/^["']|["']$/g, "");
+
 cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET,
+    cloud_name: cleanEnv(process.env.CLOUDINARY_CLOUD_NAME),
+    api_key: cleanEnv(process.env.CLOUDINARY_API_KEY),
+    api_secret: cleanEnv(process.env.CLOUDINARY_API_SECRET),
     secure: true
 });
+
+console.log(
+    "Cloudinary config:",
+    cleanEnv(process.env.CLOUDINARY_CLOUD_NAME) ? "cloud_name OK" : "cloud_name MISSING",
+    "|",
+    cleanEnv(process.env.CLOUDINARY_API_KEY) ? "api_key OK" : "api_key MISSING",
+    "|",
+    cleanEnv(process.env.CLOUDINARY_API_SECRET) ? "api_secret OK" : "api_secret MISSING"
+);
 
 const AADHAAR_FOLDER = "sunshine/aadhaar";
 
@@ -174,9 +186,12 @@ app.post("/api/upload/aadhaar", (req, res) => {
 
             console.error("Aadhaar upload error:", error);
 
+            // Cloudinary ka asli error message saath me bhejte hain taaki wajah pata chale
+            const reason = error?.message || error?.error?.message || "Unknown error";
+
             res.status(500).json({
                 success: false,
-                message: "Image upload failed. Please try again."
+                message: "Image upload failed: " + reason
             });
         }
     });
