@@ -57,7 +57,7 @@ const AADHAAR_FOLDER = "sunshine/aadhaar";
 // Image memory me aati hai, seedha Cloudinary par jaati hai (disk par save nahi hoti)
 const aadhaarUpload = multer({
     storage: multer.memoryStorage(),
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB
+    limits: { fileSize: 25 * 1024 * 1024 }, // 25 MB (badi image browser me pehle hi compress ho jaati hai)
     fileFilter: (req, file, cb) => {
         if (/^image\/(jpeg|png|webp)$/.test(file.mimetype)) {
             cb(null, true);
@@ -138,7 +138,7 @@ mongoose
 app.get("/api/cloudinary-check", async (req, res) => {
 
     const info = {
-        codeVersion: "aadhaar-v4-front-back",
+        codeVersion: "aadhaar-v5-any-size",
         cloud_name: cleanEnv(process.env.CLOUDINARY_CLOUD_NAME) ? "set" : "MISSING",
         api_key: cleanEnv(process.env.CLOUDINARY_API_KEY) ? "set" : "MISSING",
         api_secret: cleanEnv(process.env.CLOUDINARY_API_SECRET) ? "set" : "MISSING"
@@ -171,7 +171,7 @@ app.post("/api/upload/aadhaar", (req, res) => {
             let message = "Unable to read the file.";
 
             if (err.code === "LIMIT_FILE_SIZE") {
-                message = "Image must be smaller than 5 MB.";
+                message = "Image is too large. Please choose a smaller photo.";
             } else if (err.message === "ONLY_IMAGES") {
                 message = "Only JPG, PNG or WEBP images are allowed.";
             }
