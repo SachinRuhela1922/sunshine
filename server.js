@@ -19,12 +19,84 @@ const Class = require("./models/Class");
 const Syllabus = require("./models/Syllabus");
 const multer = require("multer");
 const cloudinary = require("cloudinary").v2;
+const {
+    createToken,
+    safeEqual,
+    authMiddleware,
+    sanitizeBody,
+    loginRateLimit,
+    getSecret
+} = require("./auth");
 const app = express();
 
 
+// ==========================================
+// REQUIRED ENV VARIABLES (Render > Environment)
+//   MONGODB_URI     - MongoDB Atlas connection string
+//   TOKEN_SECRET    - koi bhi lamba random text (32+ characters)
+//   ADMIN_PASSWORD  - admin login password
+// Optional:
+//   ALLOWED_ORIGINS - frontend URLs, comma se alag (e.g. https://myschool.com)
+// ==========================================
+
+const missingEnv = ["MONGODB_URI", "TOKEN_SECRET", "ADMIN_PASSWORD"]
+    .filter(name => !String(process.env[name] || "").trim());
+
+if (missingEnv.length) {
+    console.error("Missing required env variables:", missingEnv.join(", "));
+    process.exit(1);
+}
+
+getSecret(); // TOKEN_SECRET ki length check
+
+
+// Render proxy ke peeche hai - asli client IP ke liye (login rate limit)
+app.set("trust proxy", 1);
+app.disable("x-powered-by");
+
+
 // Middleware
-app.use(cors());
-app.use(express.json());
+const allowedOrigins = String(process.env.ALLOWED_ORIGINS || "")
+    .split(",")
+    .map(s => s.trim())
+    .filter(Boolean);
+
+app.use(cors(
+    allowedOrigins.length
+        ? { origin: allowedOrigins }
+        : {}
+));
+
+app.use(express.json({ limit: "1mb" }));
+app.use(sanitizeBody);
+
+app.use(["/api/admin/login", "/api/teachers/login", "/api/students/login"], loginRateLimit());
+
+app.use(authMiddleware({ Teacher }));
+
+
+// ==========================================
+// ADMIN LOGIN
+// Password ab server ke ADMIN_PASSWORD env me hai, HTML me nahi
+// ==========================================
+
+app.post("/api/admin/login", (req, res) => {
+
+    const { password } = req.body || {};
+
+    if (typeof password !== "string" || !password) {
+        return res.status(400).json({ success: false, message: "Password is required." });
+    }
+
+    if (!safeEqual(password, process.env.ADMIN_PASSWORD.trim())) {
+        return res.status(401).json({ success: false, message: "Invalid admin password." });
+    }
+
+    res.status(200).json({
+        success: true,
+        token: createToken({ role: "admin" })
+    });
+});
 
 
 // ==========================================
@@ -120,41 +192,13 @@ async function destroyCloudinaryImage(publicId) {
 
 // MongoDB Connection
 mongoose
-    .connect("mongodb+srv://pratapruhela1922_db_user:R8vy2dha648HorQB@sunshine.vgcvyy8.mongodb.net/?appName=sunshine")
+    .connect(cleanEnv(process.env.MONGODB_URI))
     .then(() => {
         console.log("MongoDB connected successfully");
     })
     .catch((error) => {
         console.error("MongoDB connection error:", error);
     });
-
-
-// ==========================================
-// CLOUDINARY CHECK (sirf testing ke liye)
-// Browser me kholo: https://YOUR-SERVER/api/cloudinary-check
-// Kaam ho jaye to ye route hata dena.
-// ==========================================
-
-app.get("/api/cloudinary-check", async (req, res) => {
-
-    const info = {
-        codeVersion: "aadhaar-v5-any-size",
-        cloud_name: cleanEnv(process.env.CLOUDINARY_CLOUD_NAME) ? "set" : "MISSING",
-        api_key: cleanEnv(process.env.CLOUDINARY_API_KEY) ? "set" : "MISSING",
-        api_secret: cleanEnv(process.env.CLOUDINARY_API_SECRET) ? "set" : "MISSING"
-    };
-
-    try {
-        const ping = await cloudinary.api.ping();
-        res.json({ ...info, cloudinary: "CONNECTED", ping });
-    } catch (error) {
-        res.status(500).json({
-            ...info,
-            cloudinary: "FAILED",
-            reason: error?.error?.message || error?.message || "Unknown error"
-        });
-    }
-});
 
 
 // ==========================================
@@ -238,7 +282,13 @@ app.post("/api/students", async (req, res) => {
 
     try {
 
-        const data = req.body;
+        const data = req.body || {};
+
+        // Ye fields server khud set karta hai, client se nahi aani chahiye
+        delete data._id;
+        delete data.studentId;
+        delete data.createdAt;
+        delete data.updatedAt;
 
         applyAadhaarClean(data);
 
@@ -314,29 +364,43 @@ app.post("/api/students", async (req, res) => {
         });
 
 
-        const studentNumber =
-            highestNumber + 1;
-
-
-        const studentId =
-            "STD" +
-            String(studentNumber).padStart(4, "0");
-
-
         // ==========================================
         // CREATE STUDENT
+        // Do admission ek saath aaye to same ID ban sakti hai -
+        // duplicate aane par agla number try karo
         // ==========================================
 
-        const student = new Student({
+        let student;
 
-            studentId,
+        for (let attempt = 1; attempt <= 5; attempt++) {
 
-            ...data
+            const studentId =
+                "STD" +
+                String(highestNumber + attempt).padStart(4, "0");
 
-        });
+            student = new Student({
 
+                ...data,
 
-        await student.save();
+                studentId
+
+            });
+
+            try {
+
+                await student.save();
+                break;
+
+            } catch (saveError) {
+
+                const isIdClash =
+                    saveError.code === 11000 &&
+                    saveError.keyPattern &&
+                    saveError.keyPattern.studentId;
+
+                if (!isIdClash || attempt === 5) throw saveError;
+            }
+        }
 
 
         // ==========================================
@@ -1099,60 +1163,6 @@ app.put("/api/teachers/:id", async (req, res) => {
     }
 
 });
-// ==========================================
-// GET SINGLE TEACHER
-// ==========================================
-
-app.get("/api/teachers/:id", async (req, res) => {
-
-    try {
-
-        const teacher = await Teacher
-            .findById(req.params.id);
-
-
-        if (!teacher) {
-
-            return res.status(404).json({
-
-                success: false,
-
-                message: "Teacher not found."
-
-            });
-
-        }
-
-
-        res.status(200).json({
-
-            success: true,
-
-            teacher
-
-        });
-
-
-    } catch (error) {
-
-        console.error(
-            "Fetch teacher error:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success: false,
-
-            message: "Unable to fetch teacher."
-
-        });
-
-    }
-
-});
-
 
 // ==========================================
 // MULTI-MONTH HELPERS
@@ -2237,84 +2247,6 @@ app.get("/api/payments/student/:studentId", async (req, res) => {
 });
 
 // ==========================================
-// GET ALL TEACHERS
-// ==========================================
-
-app.get("/api/teachers", async (req, res) => {
-
-    try {
-
-        const teachers = await Teacher
-            .find({ status: "active" })
-            .select("-password")
-            .sort({ createdAt: -1 });
-
-
-        res.status(200).json({
-
-            success: true,
-
-            count: teachers.length,
-
-            teachers
-
-        });
-
-
-    } catch (error) {
-
-        console.error(
-            "Fetch teachers error:",
-            error
-        );
-
-
-        res.status(500).json({
-
-            success: false,
-
-            message: "Unable to fetch teachers."
-
-        });
-
-    }
-
-});
-
-
-// ==========================================
-// GET SINGLE TEACHER
-// ==========================================
-
-app.get("/api/teachers/:id", async (req, res) => {
-    try {
-
-        const teacher = await Teacher.findById(req.params.id);
-
-        if (!teacher) {
-            return res.status(404).json({
-                success: false,
-                message: "Teacher not found."
-            });
-        }
-
-        res.status(200).json({
-            success: true,
-            teacher
-        });
-
-    } catch (error) {
-
-        console.error("Fetch teacher error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: "Unable to fetch teacher."
-        });
-    }
-});
-
-// ==========================================
 // RESET TEACHER PASSWORD
 // (Plaintext — admin can view/reset from the profile page.)
 // ==========================================
@@ -2627,9 +2559,10 @@ app.post("/api/teachers/login", async (req, res) => {
 
     try {
 
-        const { password } = req.body;
+        const { password } = req.body || {};
 
-        if (!password) {
+        // String hi hona chahiye - object ({"$ne": ""}) se login bypass rokta hai
+        if (typeof password !== "string" || !password) {
 
             return res.status(400).json({
                 message: "Password is required."
@@ -2682,7 +2615,12 @@ app.post("/api/teachers/login", async (req, res) => {
 
             message: "Teacher login successful.",
 
-            teacher: teacherData
+            teacher: teacherData,
+
+            token: createToken({
+                role: "teacher",
+                id: String(loggedInTeacher._id)
+            })
 
         });
 
@@ -4025,9 +3963,9 @@ app.delete("/api/notices/:id", async (req, res) => {
 
 app.post("/api/students/login", async (req, res) => {
     try {
-        const { dob } = req.body;
+        const { dob } = req.body || {};
 
-        if (!dob) {
+        if (typeof dob !== "string" || !dob.trim()) {
             return res.status(400).json({
                 success: false,
                 message: "Date of birth is required."
@@ -4099,7 +4037,11 @@ app.post("/api/students/login", async (req, res) => {
         return res.json({
             success: true,
             message: "Student login successful.",
-            student: student
+            student: student,
+            token: createToken({
+                role: "student",
+                studentId: String(student.studentId)
+            })
         });
 
     } catch (error) {
