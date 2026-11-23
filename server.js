@@ -2829,7 +2829,23 @@ app.post("/api/exam-marks", async (req, res) => {
         // UPDATE EXISTING
         // ==========================================
 
+        const isTeacher =
+            req.user && req.user.role === "teacher";
+
         if (examMarks) {
+
+            // Teacher ka ek edit already use ho chuka hai -> lock
+            if (isTeacher && examMarks.teacherEdited) {
+                return res.status(403).json({
+                    success: false,
+                    message:
+                        "Marks already edited once by teacher. Further editing is not allowed."
+                });
+            }
+
+            if (isTeacher) {
+                examMarks.teacherEdited = true;
+            }
 
             examMarks.marks =
                 formattedMarks;
@@ -2955,7 +2971,10 @@ app.post("/api/exam-marks", async (req, res) => {
 
                 percentage,
 
-                result
+                result,
+
+                teacherEdited:
+                    isTeacher
 
             });
 
@@ -3315,6 +3334,19 @@ app.put("/api/exam-marks/:id", async (req, res) => {
                 success: false,
                 message: "Exam marks not found."
             });
+        }
+
+        const isTeacher = req.user && req.user.role === "teacher";
+
+        if (isTeacher && examMarks.teacherEdited) {
+            return res.status(403).json({
+                success: false,
+                message: "Marks already edited once by teacher. Further editing is not allowed."
+            });
+        }
+
+        if (isTeacher) {
+            examMarks.teacherEdited = true;
         }
 
         // ==========================================
