@@ -130,9 +130,9 @@ const examMarksSchema = new mongoose.Schema(
     enum: ["", "Ist Division", "IInd Division", "IIIrd Division", "Fail","Pass"]
 },
 
-        // Teacher sirf EK baar marks save/edit kar sakta hai.
-        // Admin ke save karne se ye flag nahi badalta, isliye admin ke
-        // save kiye marks ko bhi teacher ek baar edit kar sakta hai.
+        // Teacher ke liye LOCK flag.
+        // Teacher ya admin, koi bhi marks save kare -> true (teacher edit nahi kar sakta).
+        // Admin unlock kare (single / all) -> false, teacher ek baar edit karega, fir true.
         teacherEdited: {
             type: Boolean,
             default: false

@@ -2834,16 +2834,21 @@ app.post("/api/exam-marks", async (req, res) => {
 
         if (examMarks) {
 
-            // Teacher ka ek edit already use ho chuka hai -> lock
+            // Record locked hai (teacher ya admin ne save kiya) -> teacher edit nahi kar sakta.
+            // Sirf admin unlock kar sakta hai.
             if (isTeacher && examMarks.teacherEdited) {
                 return res.status(403).json({
                     success: false,
                     message:
-                        "Marks already edited once by teacher. Further editing is not allowed."
+                        "Marks are locked. Ask admin to unlock them for editing."
                 });
             }
 
-            if (isTeacher) {
+            // Teacher ya admin, jo bhi save kare -> teacher ke liye lock.
+            // Admin ke structural kaam (subject order / remove subject) me
+            // keepLock bheja jaata hai -> lock jaisa hai waisa rehta hai.
+            const keepLock = !isTeacher && req.body.keepLock === true;
+            if (!keepLock) {
                 examMarks.teacherEdited = true;
             }
 
@@ -2973,8 +2978,9 @@ app.post("/api/exam-marks", async (req, res) => {
 
                 result,
 
+                // Teacher ya admin ke save ke baad teacher ke liye locked
                 teacherEdited:
-                    isTeacher
+                    true
 
             });
 
@@ -3290,6 +3296,73 @@ app.get(
     }
 );
 // ==========================================
+// UNLOCK EXAM MARKS (ADMIN ONLY)
+// Teacher routes me ye path nahi hai, isliye auth middleware
+// teacher/student ko yahan aane hi nahi deta.
+// Unlock ke baad teacher ek baar edit kar sakta hai, fir dobara lock.
+// ==========================================
+
+// Saare students (ek exam + class) ke marks unlock
+app.post("/api/exam-marks/unlock-all", async (req, res) => {
+    try {
+        if (!req.user || req.user.role !== "admin") {
+            return res.status(403).json({ success: false, message: "Only admin can unlock marks." });
+        }
+
+        const exam = String((req.body && req.body.exam) || "").trim();
+        const className = String((req.body && req.body.className) || "").trim();
+
+        if (!exam || !className) {
+            return res.status(400).json({ success: false, message: "Exam and class are required." });
+        }
+
+        const result = await ExamMarks.updateMany(
+            { exam, className, teacherEdited: true },
+            { $set: { teacherEdited: false } }
+        );
+
+        res.json({
+            success: true,
+            message: `Unlocked marks for ${result.modifiedCount || 0} student(s).`,
+            unlockedCount: result.modifiedCount || 0
+        });
+    } catch (error) {
+        console.error("Unlock all exam marks error:", error);
+        res.status(500).json({ success: false, message: "Unable to unlock marks." });
+    }
+});
+
+// Ek student ke marks unlock / lock (by record id)
+async function setExamMarksLock(req, res, lock) {
+    try {
+        if (!req.user || req.user.role !== "admin") {
+            return res.status(403).json({ success: false, message: "Only admin can change lock." });
+        }
+
+        const examMarks = await ExamMarks.findById(req.params.id);
+
+        if (!examMarks) {
+            return res.status(404).json({ success: false, message: "Exam marks not found." });
+        }
+
+        examMarks.teacherEdited = lock;
+        await examMarks.save();
+
+        res.json({
+            success: true,
+            message: examMarks.teacherEdited ? "Marks locked." : "Marks unlocked for teacher.",
+            examMarks
+        });
+    } catch (error) {
+        console.error("Unlock exam marks error:", error);
+        res.status(500).json({ success: false, message: "Unable to change lock." });
+    }
+}
+
+app.post("/api/exam-marks/:id/unlock", (req, res) => setExamMarksLock(req, res, false));
+app.post("/api/exam-marks/:id/lock", (req, res) => setExamMarksLock(req, res, true));
+
+// ==========================================
 // UPDATE EXAM MARKS BY ID
 // ==========================================
 
@@ -3341,13 +3414,12 @@ app.put("/api/exam-marks/:id", async (req, res) => {
         if (isTeacher && examMarks.teacherEdited) {
             return res.status(403).json({
                 success: false,
-                message: "Marks already edited once by teacher. Further editing is not allowed."
+                message: "Marks are locked. Ask admin to unlock them for editing."
             });
         }
 
-        if (isTeacher) {
-            examMarks.teacherEdited = true;
-        }
+        // Teacher ya admin, jo bhi save kare -> teacher ke liye lock
+        examMarks.teacherEdited = true;
 
         // ==========================================
         // MARKS ARRAY
